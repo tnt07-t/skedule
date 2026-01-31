@@ -1,25 +1,21 @@
+import logging
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 
-from api.deps import get_current_user_id, get_supabase
+from api.deps import get_current_user_id, get_supabase, decode_access_token
 from config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _user_id_from_token(access_token: str | None) -> str | None:
     if not access_token:
         return None
     try:
-        import jwt
-        payload = jwt.decode(
-            access_token,
-            settings.supabase_jwt_secret,
-            audience="authenticated",
-            algorithms=["HS256"],
-        )
-        return str(payload["sub"])
+        payload = decode_access_token(access_token)
+        return str(payload.get("sub"))
     except Exception:
         return None
 
@@ -69,17 +65,21 @@ async def google_calendar_callback(
     if error or not code or not state:
         return RedirectResponse(url=f"{settings.app_url}?calendar_error=1")
     flow = _flow()
-    flow.fetch_token(code=code)
-    creds = flow.credentials
-    user_id = state
-    supabase = get_supabase()
-    supabase.table("calendar_tokens").upsert(
-        {
-            "user_id": user_id,
-            "refresh_token": creds.refresh_token,
-            "access_token": creds.token,
-            "token_expiry": creds.expiry.isoformat() if creds.expiry else None,
-        },
-        on_conflict="user_id",
-    ).execute()
-    return RedirectResponse(url=f"{settings.app_url}?calendar_connected=1")
+    try:
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+        user_id = state
+        supabase = get_supabase()
+        supabase.table("calendar_tokens").upsert(
+            {
+                "user_id": user_id,
+                "refresh_token": creds.refresh_token,
+                "access_token": creds.token,
+                "token_expiry": creds.expiry.isoformat() if creds.expiry else None,
+            },
+            on_conflict="user_id",
+        ).execute()
+        return RedirectResponse(url=f"{settings.app_url}?calendar_connected=1")
+    except Exception:
+        logger.exception("Google OAuth callback failed")
+        return RedirectResponse(url=f"{settings.app_url}?calendar_error=1")

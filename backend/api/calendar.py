@@ -6,6 +6,7 @@ from googleapiclient.discovery import build
 import httpx
 
 from api.deps import get_current_user_id, get_supabase
+from api.time_utils import clamp_range
 from config import settings
 
 router = APIRouter()
@@ -14,9 +15,10 @@ router = APIRouter()
 def get_busy(user_id: str, supabase, start: str, end: str) -> list:
     """Return busy slots from primary calendar (for internal use)."""
     service = get_calendar_service(user_id, supabase)
+    start_dt, end_dt = clamp_range(start, end)
     body = {
-        "timeMin": start,
-        "timeMax": end,
+        "timeMin": start_dt.isoformat(),
+        "timeMax": end_dt.isoformat(),
         "items": [{"id": "primary"}],
     }
     result = service.freebusy().query(body=body).execute()

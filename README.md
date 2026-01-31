@@ -5,7 +5,9 @@ Skedule suggests focused work blocks (study, etc.) in your free time using your 
 ## Features
 
 - **Google OAuth** (Supabase Auth) + optional **Google Calendar** connect for free-busy and adding events
+- **Profile**: display name, timezone, and JSON preferences
 - **Tasks**: name, short description, difficulty (easy/medium/hard), focus (short/medium/long blocks), time preference (day/midday/night)
+- **AI plan**: uses task input + preferences + free time blocks to propose a time-block plan
 - **Suggest slots**: fills free times in your calendar with suggested blocks; you **approve** (add to Google Calendar) or **reject**
 - **UI**: week calendar with **dots** for suggested times; list of suggestions with Add/Reject
 
@@ -15,7 +17,7 @@ Skedule suggests focused work blocks (study, etc.) in your free time using your 
 
 - Create a project at [supabase.com](https://supabase.com).
 - In **Authentication → Providers**, enable **Google** and add your OAuth client ID/secret.
-- In **SQL Editor**, run the migration: `supabase/migrations/001_initial.sql`.
+- In **SQL Editor**, run the migrations: `supabase/migrations/001_initial.sql` and `supabase/migrations/002_user_profiles.sql`.
 - In **Settings → API**: copy **Project URL**, **anon** key (for frontend), **service_role** key and **JWT Secret** (for backend).
 
 ### 2. Google Cloud (Calendar)
@@ -32,7 +34,7 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate   # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
-# Edit .env: SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_URL, BACKEND_URL
+# Edit .env: SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_URL, BACKEND_URL, OPENAI_API_KEY
 uvicorn main:app --reload --port 8000
 ```
 

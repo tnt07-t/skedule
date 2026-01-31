@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.deps import get_current_user_id, get_supabase
+from api.time_utils import clamp_range, parse_iso
 from api.calendar import get_calendar_service, get_busy
 
 router = APIRouter()
@@ -12,12 +13,6 @@ router = APIRouter()
 FOCUS_MINUTES = {"short": 25, "medium": 50, "long": 90}
 # Preferred hour ranges (UTC) by time_preference: (start_hour, end_hour)
 PREF_HOURS = {"day": (9, 12), "midday": (12, 17), "night": (17, 23)}
-
-
-def parse_iso(s: str) -> datetime:
-    if s.endswith("Z"):
-        s = s.replace("Z", "+00:00")
-    return datetime.fromisoformat(s)
 
 
 def slots_from_busy(busy: list, start_dt: datetime, end_dt: datetime, duration_min: int):
@@ -62,8 +57,7 @@ def suggest_slots(
     pref = task.get("time_preference", "midday")
     h_start, h_end = PREF_HOURS.get(pref, (12, 17))
 
-    start_dt = parse_iso(start)
-    end_dt = parse_iso(end)
+    start_dt, end_dt = clamp_range(start, end)
     # Narrow to preferred hours on each day
     candidates = []
     d = start_dt.date()

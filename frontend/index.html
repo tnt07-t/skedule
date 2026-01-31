@@ -31,6 +31,34 @@
         <a id="btn-connect-calendar" href="#" class="text-teal-400 hover:underline">Connect Google Calendar</a>
       </div>
 
+      <!-- Profile -->
+      <section class="mb-6 p-4 bg-slate-800 rounded">
+        <h2 class="text-lg font-semibold mb-3">Profile</h2>
+        <form id="profile-form" class="space-y-3">
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Display name</label>
+            <input type="text" name="display_name" placeholder="Your name"
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-500" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Timezone</label>
+            <input type="text" name="timezone" placeholder="America/Los_Angeles"
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-500" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Preferences (JSON)</label>
+            <textarea name="profile_preferences" rows="3" placeholder='{"focus":"deep","avoid":["Fridays"]}'
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-500"></textarea>
+          </div>
+          <div class="flex items-center gap-3">
+            <button type="submit" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded text-white">
+              Save profile
+            </button>
+            <span id="profile-status" class="text-sm text-slate-500"></span>
+          </div>
+        </form>
+      </section>
+
       <!-- Task form -->
       <section class="mb-6 p-4 bg-slate-800 rounded">
         <h2 class="text-lg font-semibold mb-3">Add task</h2>
@@ -77,6 +105,27 @@
         </form>
       </section>
 
+      <!-- AI plan -->
+      <section class="mb-6 p-4 bg-slate-800 rounded">
+        <h2 class="text-lg font-semibold mb-3">AI plan</h2>
+        <form id="plan-form" class="space-y-3">
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Task or goal</label>
+            <textarea name="plan_task" rows="2" required placeholder="e.g. Write a 5-page essay on climate policy"
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-500"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Extra preferences (JSON or notes)</label>
+            <textarea name="plan_preferences" rows="2" placeholder='{"preferred_times":["morning"],"max_session_minutes":50}'
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-500"></textarea>
+          </div>
+          <button type="submit" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded text-white">
+            Generate plan
+          </button>
+        </form>
+        <pre id="plan-output" class="mt-3 text-xs text-slate-300 bg-slate-900 rounded p-3 overflow-auto hidden"></pre>
+      </section>
+
       <!-- Calendar + suggestions -->
       <section class="mb-6">
         <h2 class="text-lg font-semibold mb-3">Calendar</h2>
@@ -105,10 +154,10 @@
 
   <script>
     const API = 'http://localhost:8000';
-    const SUPABASE_URL = ''; // set in .env or replace
-    const SUPABASE_ANON_KEY = '';
+    let SUPABASE_URL = '';
+    let SUPABASE_ANON_KEY = '';
 
-    let supabase = null;
+    let sb = null;
     let session = null;
 
     function getToken() {
@@ -129,7 +178,7 @@
       if (session) {
         el.innerHTML = `<span class="text-slate-400 text-sm">${session.user?.email}</span>
           <button id="btn-signout" class="ml-2 text-sm text-slate-500 hover:text-white">Sign out</button>`;
-        document.getElementById('btn-signout').onclick = () => { supabase.auth.signOut(); };
+        document.getElementById('btn-signout').onclick = () => { sb.auth.signOut(); };
       } else {
         el.innerHTML = '';
       }
@@ -145,25 +194,77 @@
       document.getElementById('main-screen').classList.add('hidden');
     }
 
-    document.getElementById('btn-google').onclick = async () => {
-      await supabase.auth.signInWithOAuth({ provider: 'google' });
+    async function loadProfile() {
+      const profile = await api('/api/profile');
+      document.querySelector('[name="display_name"]').value = profile.display_name || '';
+      document.querySelector('[name="timezone"]').value = profile.timezone || '';
+      const prefs = profile.preferences || {};
+      document.querySelector('[name="profile_preferences"]').value = Object.keys(prefs).length
+        ? JSON.stringify(prefs, null, 2)
+        : '';
+    }
+
+    document.getElementById('profile-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const prefsText = fd.get('profile_preferences')?.toString().trim() || '';
+      let prefs = null;
+      if (prefsText) {
+        try {
+          prefs = JSON.parse(prefsText);
+        } catch (err) {
+          alert('Preferences must be valid JSON or left blank.');
+          return;
+        }
+      }
+      const status = document.getElementById('profile-status');
+      status.textContent = 'Saving...';
+      await api('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          display_name: fd.get('display_name') || '',
+          timezone: fd.get('timezone') || '',
+          preferences: prefs || {},
+        }),
+      });
+      status.textContent = 'Saved';
+      setTimeout(() => { status.textContent = ''; }, 1500);
     };
+
+    document.getElementById('btn-google').onclick = async () => {
+      await sb.auth.signInWithOAuth({ provider: 'google' });
+    };
+
+    async function loadConfig() {
+      const res = await fetch(`${API}/api/config`);
+      if (!res.ok) throw new Error(await res.text());
+      const cfg = await res.json();
+      SUPABASE_URL = cfg.supabase_url || '';
+      SUPABASE_ANON_KEY = cfg.supabase_anon_key || '';
+    }
 
     async function initSupabase() {
       if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        document.getElementById('login-screen').innerHTML = '<p class="text-amber-500">Set SUPABASE_URL and SUPABASE_ANON_KEY in index.html</p>';
+        document.getElementById('login-screen').innerHTML = '<p class="text-amber-500">Missing Supabase config. Check backend /api/config and backend/.env</p>';
         return;
       }
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      const { data: { session: s } } = await supabase.auth.getSession();
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data: { session: s } } = await sb.auth.getSession();
       session = s;
       if (session) showMain(); else showLogin();
       renderAuth();
-      supabase.auth.onAuthStateChange((e, s) => {
+      sb.auth.onAuthStateChange((e, s) => {
         session = s;
-        if (session) showMain(); else showLogin();
+        if (session) {
+          showMain();
+          loadProfile();
+          loadTasks();
+          loadSuggestions();
+          loadWeekDots();
+        } else {
+          showLogin();
+        }
         renderAuth();
-        if (session) loadTasks(); loadSuggestions();
       });
     }
 
@@ -182,6 +283,38 @@
       });
       e.target.reset();
       loadTasks();
+    };
+
+    document.getElementById('plan-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const task = fd.get('plan_task')?.toString().trim();
+      const prefsText = fd.get('plan_preferences')?.toString().trim() || '';
+      if (!task) return;
+      let prefs = null;
+      if (prefsText) {
+        try {
+          prefs = JSON.parse(prefsText);
+        } catch (err) {
+          prefs = { notes: prefsText };
+        }
+      }
+      const output = document.getElementById('plan-output');
+      output.classList.add('hidden');
+      output.textContent = 'Loading...';
+      try {
+        const res = await api('/api/plan', {
+          method: 'POST',
+          body: JSON.stringify({
+            task,
+            preferences: prefs || null,
+          }),
+        });
+        output.textContent = JSON.stringify(res, null, 2);
+      } catch (err) {
+        output.textContent = err.message || 'Failed to generate plan';
+      }
+      output.classList.remove('hidden');
     };
 
     async function loadTasks() {
@@ -325,13 +458,19 @@
       history.replaceState({}, '', location.pathname);
     }
 
-    initSupabase().then(() => {
-      if (session) {
-        loadTasks();
-        loadSuggestions();
-        loadWeekDots();
-      }
-    });
+    loadConfig()
+      .then(initSupabase)
+      .then(() => {
+        if (session) {
+          loadProfile();
+          loadTasks();
+          loadSuggestions();
+          loadWeekDots();
+        }
+      })
+      .catch((e) => {
+        document.getElementById('login-screen').innerHTML = `<p class="text-amber-500">${e.message || 'Failed to load config'}</p>`;
+      });
   </script>
 </body>
 </html>
