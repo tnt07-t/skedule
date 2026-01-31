@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skedule</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+  <div id="app" class="max-w-4xl mx-auto p-4">
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+      <h1 class="text-2xl font-bold text-teal-400">Skedule</h1>
+      <div id="auth-area"></div>
+    </header>
+
+    <!-- Login -->
+    <div id="login-screen" class="text-center py-12">
+      <p class="text-slate-400 mb-4">Sign in with Google to use Skedule</p>
+      <button id="btn-google" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded text-white">
+        Sign in with Google
+      </button>
+    </div>
+
+    <!-- Main (after login) -->
+    <div id="main-screen" class="hidden">
+      <!-- Connect Calendar -->
+      <div id="calendar-connect" class="mb-4 p-3 bg-slate-800 rounded flex items-center justify-between">
+        <span id="calendar-status" class="text-slate-400">Google Calendar not connected</span>
+        <a id="btn-connect-calendar" href="#" class="text-teal-400 hover:underline">Connect Google Calendar</a>
+      </div>
+
+      <!-- Task form -->
+      <section class="mb-6 p-4 bg-slate-800 rounded">
+        <h2 class="text-lg font-semibold mb-3">Add task</h2>
+        <form id="task-form" class="space-y-3">
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Task name</label>
+            <input type="text" name="name" required placeholder="e.g. Study calculus"
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-500" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Description (short)</label>
+            <input type="text" name="description" placeholder="Chapter 3"
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-500" />
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">Difficulty</label>
+              <select name="difficulty" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white">
+                <option value="easy">Easy</option>
+                <option value="medium" selected>Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">Focus</label>
+              <select name="focus_level" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white">
+                <option value="short">Short (25m)</option>
+                <option value="medium" selected>Medium (50m)</option>
+                <option value="long">Long (90m)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">Preference</label>
+              <select name="time_preference" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white">
+                <option value="day">Day</option>
+                <option value="midday" selected>Midday</option>
+                <option value="night">Night</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded text-white">
+            Add task
+          </button>
+        </form>
+      </section>
+
+      <!-- Calendar + suggestions -->
+      <section class="mb-6">
+        <h2 class="text-lg font-semibold mb-3">Calendar</h2>
+        <div class="flex gap-4">
+          <!-- Week strip: days with dots for suggestions -->
+          <div id="calendar-week" class="flex-1 p-4 bg-slate-800 rounded min-h-[200px]">
+            <div id="week-days" class="grid grid-cols-7 gap-2 mb-4 text-sm text-slate-400"></div>
+            <div id="week-slots" class="space-y-1 text-sm"></div>
+          </div>
+          <!-- Suggestions list -->
+          <div id="suggestions-panel" class="w-72 p-4 bg-slate-800 rounded">
+            <h3 class="text-sm font-semibold text-slate-400 mb-2">Suggestions</h3>
+            <div id="suggestions-list" class="space-y-2"></div>
+            <p id="suggestions-empty" class="text-slate-500 text-sm">Add a task and click "Suggest slots" on a task.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tasks list -->
+      <section>
+        <h2 class="text-lg font-semibold mb-3">Your tasks</h2>
+        <div id="tasks-list" class="space-y-2"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:8000';
+    const SUPABASE_URL = ''; // set in .env or replace
+    const SUPABASE_ANON_KEY = '';
+
+    let supabase = null;
+    let session = null;
+
+    function getToken() {
+      return session?.access_token || '';
+    }
+
+    async function api(path, opts = {}) {
+      const url = `${API}${path}`;
+      const headers = { ...opts.headers, 'Content-Type': 'application/json' };
+      if (getToken()) headers['Authorization'] = `Bearer ${getToken()}`;
+      const res = await fetch(url, { ...opts, headers });
+      if (!res.ok) throw new Error(await res.text());
+      return opts.raw ? res : res.json();
+    }
+
+    function renderAuth() {
+      const el = document.getElementById('auth-area');
+      if (session) {
+        el.innerHTML = `<span class="text-slate-400 text-sm">${session.user?.email}</span>
+          <button id="btn-signout" class="ml-2 text-sm text-slate-500 hover:text-white">Sign out</button>`;
+        document.getElementById('btn-signout').onclick = () => { supabase.auth.signOut(); };
+      } else {
+        el.innerHTML = '';
+      }
+    }
+
+    function showMain() {
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('main-screen').classList.remove('hidden');
+    }
+
+    function showLogin() {
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('main-screen').classList.add('hidden');
+    }
+
+    document.getElementById('btn-google').onclick = async () => {
+      await supabase.auth.signInWithOAuth({ provider: 'google' });
+    };
+
+    async function initSupabase() {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        document.getElementById('login-screen').innerHTML = '<p class="text-amber-500">Set SUPABASE_URL and SUPABASE_ANON_KEY in index.html</p>';
+        return;
+      }
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data: { session: s } } = await supabase.auth.getSession();
+      session = s;
+      if (session) showMain(); else showLogin();
+      renderAuth();
+      supabase.auth.onAuthStateChange((e, s) => {
+        session = s;
+        if (session) showMain(); else showLogin();
+        renderAuth();
+        if (session) loadTasks(); loadSuggestions();
+      });
+    }
+
+    document.getElementById('task-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      await api('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: fd.get('name'),
+          description: fd.get('description') || '',
+          difficulty: fd.get('difficulty'),
+          focus_level: fd.get('focus_level'),
+          time_preference: fd.get('time_preference'),
+        }),
+      });
+      e.target.reset();
+      loadTasks();
+    };
+
+    async function loadTasks() {
+      const tasks = await api('/api/tasks');
+      const el = document.getElementById('tasks-list');
+      el.innerHTML = tasks.map(t => `
+        <div class="p-3 bg-slate-800 rounded flex justify-between items-center">
+          <div>
+            <span class="font-medium">${escapeHtml(t.name)}</span>
+            <span class="text-slate-500 text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
+          </div>
+          <button data-task-id="${t.id}" class="suggest-slots px-2 py-1 text-sm bg-teal-600 hover:bg-teal-500 rounded">Suggest slots</button>
+        </div>
+      `).join('');
+      el.querySelectorAll('.suggest-slots').forEach(btn => {
+        btn.onclick = () => suggestSlots(btn.dataset.taskId);
+      });
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    async function suggestSlots(taskId) {
+      const start = new Date();
+      start.setDate(start.getDate() - start.getDay());
+      start.setHours(0,0,0,0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      try {
+        await api(`/api/suggestions/suggest/${taskId}?start=${start.toISOString()}&end=${end.toISOString()}`);
+        loadSuggestions();
+        loadWeekDots();
+      } catch (e) {
+        alert(e.message || 'Failed (connect Google Calendar first)');
+      }
+    }
+
+    let suggestionsCache = [];
+    async function loadSuggestions() {
+      const list = await api('/api/suggestions');
+      suggestionsCache = list;
+      const pending = list.filter(s => s.status === 'pending');
+      const el = document.getElementById('suggestions-list');
+      const empty = document.getElementById('suggestions-empty');
+      if (pending.length === 0) {
+        el.innerHTML = '';
+        empty.classList.remove('hidden');
+        loadWeekDots();
+        return;
+      }
+      empty.classList.add('hidden');
+      el.innerHTML = pending.map(s => {
+        const start = new Date(s.start_time);
+        const end = new Date(s.end_time);
+        const label = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        return `
+          <div class="p-2 bg-slate-700 rounded flex justify-between items-center gap-2" data-id="${s.id}">
+            <span class="text-xs truncate">${label}</span>
+            <span class="flex gap-1">
+              <button class="approve px-1.5 py-0.5 text-xs bg-teal-600 rounded">Add</button>
+              <button class="reject px-1.5 py-0.5 text-xs bg-slate-600 rounded">Reject</button>
+            </span>
+          </div>
+        `;
+      }).join('');
+      el.querySelectorAll('.approve').forEach(btn => {
+        btn.onclick = () => approve(btn.closest('[data-id]').dataset.id);
+      });
+      el.querySelectorAll('.reject').forEach(btn => {
+        btn.onclick = () => reject(btn.closest('[data-id]').dataset.id);
+      });
+      loadWeekDots();
+    }
+
+    async function approve(id) {
+      await api(`/api/suggestions/${id}/approve`, { method: 'POST', body: JSON.stringify({ add_to_calendar: true }) });
+      loadSuggestions();
+      loadWeekDots();
+    }
+
+    async function reject(id) {
+      await api(`/api/suggestions/${id}/reject`, { method: 'POST' });
+      loadSuggestions();
+      loadWeekDots();
+    }
+
+    function loadWeekDots() {
+      const weekDays = document.getElementById('week-days');
+      const weekSlots = document.getElementById('week-slots');
+      const d = new Date();
+      d.setDate(d.getDate() - d.getDay());
+      d.setHours(0, 0, 0, 0);
+      let daysHtml = '';
+      for (let i = 0; i < 7; i++) {
+        const day = new Date(d);
+        day.setDate(d.getDate() + i);
+        daysHtml += `<div class="text-center" data-day="${day.toISOString().slice(0,10)}">${day.toLocaleDateString('en-US', { weekday: 'short' })}<br><span class="text-slate-500">${day.getDate()}</span><div class="dots mt-1 min-h-[24px] flex flex-wrap justify-center gap-0.5"></div></div>`;
+      }
+      weekDays.innerHTML = daysHtml;
+      const pending = suggestionsCache.filter(s => s.status === 'pending');
+      pending.forEach(s => {
+        const start = new Date(s.start_time);
+        const dayKey = start.toISOString().slice(0, 10);
+        const cell = weekDays.querySelector(`[data-day="${dayKey}"] .dots`);
+        if (cell) {
+          const dot = document.createElement('span');
+          dot.className = 'inline-block w-2 h-2 rounded-full bg-teal-500';
+          dot.title = start.toLocaleTimeString() + ' – ' + new Date(s.end_time).toLocaleTimeString();
+          cell.appendChild(dot);
+        }
+      });
+      if (pending.length === 0) {
+        weekSlots.innerHTML = '<p class="text-slate-500 text-sm">Suggestions show as dots above. Add a task → Suggest slots.</p>';
+      } else {
+        weekSlots.innerHTML = '<p class="text-slate-500 text-sm">Dots = suggested times. Approve to add to Google Calendar.</p>';
+      }
+    }
+
+    document.getElementById('btn-connect-calendar').onclick = (e) => {
+      e.preventDefault();
+      const token = getToken();
+      if (!token) { alert('Sign in first.'); return; }
+      window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
+    };
+
+    if (session) {
+      document.getElementById('calendar-status').textContent = 'Google Calendar: check connection in Settings';
+    }
+
+    // URL params
+    const params = new URLSearchParams(location.search);
+    if (params.get('calendar_connected') === '1') {
+      document.getElementById('calendar-status').textContent = 'Google Calendar connected';
+      history.replaceState({}, '', location.pathname);
+    }
+    if (params.get('calendar_error') === '1') {
+      document.getElementById('calendar-status').textContent = 'Calendar connection failed';
+      history.replaceState({}, '', location.pathname);
+    }
+
+    initSupabase().then(() => {
+      if (session) {
+        loadTasks();
+        loadSuggestions();
+        loadWeekDots();
+      }
+    });
+  </script>
+</body>
+</html>

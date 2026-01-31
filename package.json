@@ -1,0 +1,13 @@
+{
+  "name": "skedule",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && uvicorn main:app --reload",
+    "dev:frontend": "npx serve frontend -p 3000"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
