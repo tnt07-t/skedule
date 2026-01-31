@@ -11,7 +11,7 @@ router = APIRouter()
 # Block lengths in minutes by focus_level
 FOCUS_MINUTES = {"short": 25, "medium": 50, "long": 90}
 # Preferred hour ranges (UTC) by time_preference: (start_hour, end_hour)
-PREF_HOURS = {"day": (9, 12), "midday": (12, 17), "night": (17, 22)}
+PREF_HOURS = {"day": (9, 12), "midday": (12, 17), "night": (17, 23)}
 
 
 def parse_iso(s: str) -> datetime:
