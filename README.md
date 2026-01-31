@@ -29,10 +29,9 @@ Skedule suggests focused work blocks (study, etc.) in your free time using your 
 
 ```bash
 cd backend
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate   # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
-cp .env.example .env
 # Edit .env: SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_URL, BACKEND_URL
 uvicorn main:app --reload --port 8000
 ```
@@ -43,7 +42,8 @@ uvicorn main:app --reload --port 8000
 - Serve the frontend (must be same origin or configure CORS):
 
 ```bash
-npx serve frontend -p 3000
+cd frontend
+npx serve . -p 3000
 ```
 
 Open `http://localhost:3000`. Sign in with Google, connect Google Calendar, add a task, click **Suggest slots**, then approve or reject suggestions. Dots on the week view show suggested times.
