@@ -14,10 +14,10 @@
     :root {
       --accent: #f97316;
       --accent-strong: #ea580c;
-      --panel: #ffffff;
-      --panel-border: #e5e7eb;
-      --text: #0f172a;
-      --muted: #64748b;
+      --panel: rgba(48, 30, 22, 0.92);
+      --panel-border: rgba(255, 255, 255, 0.14);
+      --text: #f9fbff;
+      --muted: #d8e0ec;
       --bg: linear-gradient(135deg, #2b1308 0%, #3b180a 20%, #4c1f0c 45%, #5f260f 65%, #752f12 85%, #8c3915 100%);
     }
     body {
@@ -29,7 +29,7 @@
       background: var(--panel);
       border: 1px solid var(--panel-border);
       border-radius: 18px;
-      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.16), 0 8px 24px rgba(234, 88, 12, 0.18);
+      box-shadow: 0 26px 90px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(234, 88, 12, 0.18);
     }
     .pill { border-radius: 999px; }
     .btn-accent {
@@ -41,6 +41,14 @@
       background: var(--accent-strong);
       transform: translateY(-1px);
       box-shadow: 0 10px 30px rgba(234, 88, 12, 0.25);
+    }
+    input, select, textarea {
+      background: #2a170f !important;
+      border-color: #4a2a1b !important;
+      color: #f9fbff !important;
+    }
+    input::placeholder, textarea::placeholder {
+      color: #d8e0ec !important;
     }
   </style>
 </head>
