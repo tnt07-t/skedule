@@ -19,21 +19,35 @@ def get_profile(
     user_id: str = Depends(get_current_user_id),
     supabase=Depends(get_supabase),
 ):
-    r = (
+    profile_r = (
         supabase.table("user_profiles")
         .select("*")
         .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
-    rows = r.data or []
-    if rows:
-        return rows[0]
-    # No profile yet; return defaults (client may save to create)
+    profile = (profile_r.data or [None])[0]
+
+    # Detect calendar connection
+    cal_r = (
+        supabase.table("calendar_tokens")
+        .select("user_id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    calendar_connected = bool(cal_r.data)
+
+    if profile:
+        if calendar_connected:
+            profile["timezone"] = None  # ignore stored timezone if calendar is connected
+        return profile
+
+    # No profile yet; return defaults
     return {
         "user_id": user_id,
         "display_name": "",
-        "timezone": "UTC",
+        "timezone": None if calendar_connected else "",
         "preferences": {},
     }
 
@@ -48,7 +62,17 @@ def upsert_profile(
     if body.display_name is not None:
         data["display_name"] = body.display_name
     if body.timezone is not None:
-        data["timezone"] = body.timezone
+        # Only store timezone if not connected to calendar (calendar will provide tz)
+        cal_r = (
+            supabase.table("calendar_tokens")
+            .select("user_id")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        calendar_connected = bool(cal_r.data)
+        if not calendar_connected:
+            data["timezone"] = body.timezone
     if body.preferences is not None:
         data["preferences"] = body.preferences
     r = (
