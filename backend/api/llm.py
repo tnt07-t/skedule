@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -17,9 +17,9 @@ router = APIRouter()
 
 class PlanRequest(BaseModel):
     task: str
-    preferences: dict | None = None
-    start: str | None = None
-    end: str | None = None
+    preferences: Optional[dict] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
 
 
 def _merge_busy(busy: list) -> list[tuple[datetime, datetime]]:

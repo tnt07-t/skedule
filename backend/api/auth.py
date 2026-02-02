@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
@@ -10,7 +11,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _user_id_from_token(access_token: str | None) -> str | None:
+def _user_id_from_token(access_token: Optional[str]) -> Optional[str]:
     if not access_token:
         return None
     try:
@@ -41,7 +42,7 @@ def _flow():
 
 @router.get("/google/connect")
 def google_calendar_connect(
-    access_token: str | None = Query(None, alias="access_token"),
+    access_token: Optional[str] = Query(None, alias="access_token"),
 ):
     """Redirect to Google OAuth for Calendar. Token from Bearer header or ?access_token= (for link)."""
     uid = _user_id_from_token(access_token) if access_token else None
@@ -58,9 +59,9 @@ def google_calendar_connect(
 
 @router.get("/google/callback")
 async def google_calendar_callback(
-    code: str | None = None,
-    state: str | None = None,
-    error: str | None = None,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
 ):
     if error or not code or not state:
         return RedirectResponse(url=f"{settings.app_url}?calendar_error=1")

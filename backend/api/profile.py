@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -8,9 +9,9 @@ router = APIRouter()
 
 
 class ProfileUpdate(BaseModel):
-    display_name: str | None = None
-    timezone: str | None = None
-    preferences: dict | None = None
+    display_name: Optional[str] = None
+    timezone: Optional[str] = None
+    preferences: Optional[Dict[str, Any]] = None
 
 
 @router.get("")
@@ -22,11 +23,13 @@ def get_profile(
         supabase.table("user_profiles")
         .select("*")
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
-    if r.data:
-        return r.data
+    rows = r.data or []
+    if rows:
+        return rows[0]
+    # No profile yet; return defaults (client may save to create)
     return {
         "user_id": user_id,
         "display_name": "",

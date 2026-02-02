@@ -1,4 +1,5 @@
 """Suggest time blocks from free-busy and task prefs; approve/reject."""
+from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -101,7 +102,7 @@ def suggest_slots(
 
 @router.get("")
 def list_suggestions(
-    task_id: str | None = None,
+    task_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     supabase=Depends(get_supabase),
 ):

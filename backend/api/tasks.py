@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from enum import Enum
@@ -33,8 +34,8 @@ class TaskCreate(BaseModel):
     focus_level: FocusLevel
     deadline: str  # ISO datetime string
     # Optional fields
-    description: str | None = None
-    time_preference: TimePreference | None = None
+    description: Optional[str] = None
+    time_preference: Optional[TimePreference] = None
 
     @field_validator("name")
     @classmethod
@@ -45,12 +46,12 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    difficulty: DifficultyLevel | None = None
-    focus_level: FocusLevel | None = None
-    time_preference: TimePreference | None = None
-    deadline: str | None = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    difficulty: Optional[DifficultyLevel] = None
+    focus_level: Optional[FocusLevel] = None
+    time_preference: Optional[TimePreference] = None
+    deadline: Optional[str] = None
 
 
 @router.get("")

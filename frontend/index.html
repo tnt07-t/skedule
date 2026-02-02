@@ -195,6 +195,7 @@
     }
 
     async function loadProfile() {
+      if (!getToken()) return;
       const profile = await api('/api/profile');
       document.querySelector('[name="display_name"]').value = profile.display_name || '';
       document.querySelector('[name="timezone"]').value = profile.timezone || '';
@@ -318,6 +319,7 @@
     };
 
     async function loadTasks() {
+      if (!getToken()) return;
       const tasks = await api('/api/tasks');
       const el = document.getElementById('tasks-list');
       el.innerHTML = tasks.map(t => `
