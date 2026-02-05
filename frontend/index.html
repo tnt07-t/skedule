@@ -50,6 +50,139 @@
     input::placeholder, textarea::placeholder {
       color: #d8e0ec !important;
     }
+    .calendar-days-header {
+      display: grid;
+      grid-template-columns: 64px repeat(7, 1fr);
+      gap: 0;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .calendar-days-header .day {
+      text-align: center;
+      padding: 4px 0;
+    }
+    .calendar-grid {
+      position: relative;
+      height: 768px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--panel-border);
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .calendar-grid-inner {
+      display: grid;
+      grid-template-columns: 64px repeat(7, 1fr);
+      height: 100%;
+    }
+    .calendar-time-col {
+      display: flex;
+      flex-direction: column;
+      background: rgba(0, 0, 0, 0.15);
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .calendar-time-col .time {
+      height: var(--hour-height);
+      font-size: 11px;
+      color: var(--muted);
+      padding: 2px 6px;
+    }
+    .calendar-day-col {
+      position: relative;
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+      background-image: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.05) 0,
+        rgba(255, 255, 255, 0.05) 1px,
+        transparent 1px,
+        transparent var(--hour-height)
+      );
+    }
+    .calendar-block {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      border-radius: 8px;
+      padding: 4px 6px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+    .calendar-block .block-title {
+      font-weight: 600;
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+    .calendar-block .block-actions {
+      display: flex;
+      gap: 6px;
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: opacity 120ms ease, max-height 120ms ease;
+    }
+    .calendar-block:hover .block-actions {
+      opacity: 1;
+      max-height: 24px;
+    }
+    .calendar-block .block-actions button {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: rgba(0, 0, 0, 0.2);
+      color: #fff;
+    }
+    .calendar-block.busy {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #fff;
+      z-index: 1;
+    }
+    .calendar-block.event {
+      background: rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #fff;
+      z-index: 2;
+    }
+    .calendar-block.suggestion {
+      background: rgba(234, 88, 12, 0.18);
+      border: 1px dashed rgba(234, 88, 12, 0.7);
+      color: #fff;
+      z-index: 3;
+    }
+    .calendar-month {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+    .month-cell {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      min-height: 110px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+    .month-cell .date {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .month-cell .events {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .month-event {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   </style>
 </head>
 <body class="min-h-screen">
@@ -74,10 +207,10 @@
     <!-- Main (after login) -->
     <div id="main-screen" class="hidden space-y-5">
       <!-- Connect Calendar -->
-      <div id="calendar-connect" class="mb-2 p-4 card flex items-center justify-between">
-        <span id="calendar-status" class="text-[var(--muted)]">Google Calendar not connected</span>
-        <a id="btn-connect-calendar" href="#" class="text-[var(--accent)] hover:text-[var(--accent-strong)] font-medium">Connect Google Calendar</a>
-      </div>
+        <div id="calendar-connect" class="mb-2 p-4 card flex items-center justify-between">
+          <span id="calendar-status" class="text-[var(--muted)]">Google Calendar not connected</span>
+          <a id="btn-connect-calendar" href="#" class="text-[var(--accent)] hover:text-[var(--accent-strong)] font-medium">Connect Google Calendar</a>
+        </div>
 
       <!-- Task form -->
       <section class="mb-2 p-5 card">
@@ -100,9 +233,9 @@
             <div>
               <label class="block text-sm text-[var(--muted)] mb-1">Difficulty</label>
               <select name="difficulty" class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)]">
-                <option value="low">Easy</option>
+                <option value="easy">Easy</option>
                 <option value="medium" selected>Medium</option>
-                <option value="high">Hard</option>
+                <option value="hard">Hard</option>
               </select>
             </div>
             <div>
@@ -128,35 +261,22 @@
         </form>
       </section>
 
-      <!-- AI plan -->
-      <section class="mb-2 p-5 card">
-        <h2 class="text-lg font-semibold mb-3 text-[var(--text)]">AI plan</h2>
-        <form id="plan-form" class="space-y-3">
-          <div>
-            <label class="block text-sm text-[var(--muted)] mb-1">Task or goal</label>
-            <textarea name="plan_task" rows="2" required placeholder="e.g. Write a 5-page essay on climate policy"
-              class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]"></textarea>
-          </div>
-          <div>
-            <label class="block text-sm text-[var(--muted)] mb-1">Extra preferences (JSON or notes)</label>
-            <textarea name="plan_preferences" rows="2" placeholder='{"preferred_times":["morning"],"max_session_minutes":50}'
-              class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]"></textarea>
-          </div>
-          <button type="submit" class="px-4 py-2 btn-accent pill text-sm font-medium">
-            Generate plan
-          </button>
-        </form>
-        <pre id="plan-output" class="mt-3 text-xs text-[var(--muted)] bg-white border border-[var(--panel-border)] rounded-lg p-3 overflow-auto hidden"></pre>
-      </section>
-
       <!-- Calendar + suggestions -->
       <section class="mb-2">
-        <h2 class="text-lg font-semibold mb-3 text-white">Calendar</h2>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold text-white">Calendar</h2>
+          <div class="flex items-center gap-2">
+            <button id="view-day" class="px-3 py-1 text-xs pill bg-white/10 text-white">Day</button>
+            <button id="view-week" class="px-3 py-1 text-xs pill bg-white/10 text-white">Week</button>
+            <button id="view-month" class="px-3 py-1 text-xs pill bg-white/10 text-white">Month</button>
+          </div>
+        </div>
         <div class="flex flex-col lg:flex-row gap-4">
           <!-- Week strip: days with dots for suggestions -->
           <div id="calendar-week" class="flex-1 p-5 card min-h-[220px]">
-            <div id="week-days" class="grid grid-cols-7 gap-2 mb-4 text-sm text-[var(--muted)]"></div>
-            <div id="week-slots" class="space-y-1 text-sm text-[var(--muted)]"></div>
+            <div id="calendar-days-header" class="calendar-days-header"></div>
+            <div id="calendar-grid" class="calendar-grid"></div>
+            <p id="calendar-empty" class="text-slate-500 text-sm mt-3 hidden"></p>
           </div>
           <!-- Suggestions list -->
           <div id="suggestions-panel" class="w-full lg:w-72 p-5 card">
@@ -185,6 +305,16 @@
 
     let sb = null;
     let session = null;
+    let calendarConnected = false;
+    let calendarEvents = [];
+    let calendarBusy = [];
+    let suggestionsCache = [];
+    let viewMode = 'week';
+    let viewAnchor = new Date();
+
+    const CAL_START_HOUR = 6;
+    const CAL_END_HOUR = 22;
+    const HOUR_HEIGHT = 48;
 
     function getToken() {
       return session?.access_token || '';
@@ -303,6 +433,354 @@
       document.getElementById('main-screen').classList.add('hidden');
     }
 
+    function setCalendarConnected(connected) {
+      calendarConnected = !!connected;
+      const status = document.getElementById('calendar-status');
+      const btn = document.getElementById('btn-connect-calendar');
+      if (calendarConnected) {
+        status.textContent = 'Google Calendar connected';
+        btn.classList.add('hidden');
+      } else {
+        status.textContent = 'Google Calendar not connected';
+        btn.classList.remove('hidden');
+      }
+    }
+
+    function updateViewButtons() {
+      const map = {
+        day: document.getElementById('view-day'),
+        week: document.getElementById('view-week'),
+        month: document.getElementById('view-month'),
+      };
+      Object.entries(map).forEach(([mode, btn]) => {
+        if (!btn) return;
+        if (mode === viewMode) {
+          btn.classList.add('btn-accent');
+          btn.classList.remove('bg-white/10');
+        } else {
+          btn.classList.remove('btn-accent');
+          btn.classList.add('bg-white/10');
+        }
+      });
+    }
+
+    function setViewMode(mode) {
+      viewMode = mode;
+      viewAnchor = new Date();
+      updateViewButtons();
+      loadSchedule();
+    }
+
+    function getViewRange() {
+      const anchor = new Date(viewAnchor);
+      anchor.setHours(0, 0, 0, 0);
+      if (viewMode === 'day') {
+        const end = new Date(anchor);
+        end.setDate(end.getDate() + 1);
+        return { start: anchor, end };
+      }
+      if (viewMode === 'month') {
+        const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+        const gridStart = new Date(monthStart);
+        gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+        const gridEnd = new Date(gridStart);
+        gridEnd.setDate(gridEnd.getDate() + 42);
+        return { start: gridStart, end: gridEnd };
+      }
+      const end = new Date(anchor);
+      end.setDate(end.getDate() + 7);
+      return { start: anchor, end };
+    }
+
+    function dayKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function renderWeekHeader(start, days) {
+      const header = document.getElementById('calendar-days-header');
+      header.style.gridTemplateColumns = `64px repeat(${days}, 1fr)`;
+      let html = '<div></div>';
+      for (let i = 0; i < days; i++) {
+        const day = new Date(start);
+        day.setDate(start.getDate() + i);
+        const label = day.toLocaleDateString('en-US', { weekday: 'short' });
+        html += `<div class="day" data-day="${dayKey(day)}">${label}<div class="text-slate-500 text-xs">${day.getDate()}</div></div>`;
+      }
+      header.innerHTML = html;
+    }
+
+    function buildCalendarGrid(start, days) {
+      const grid = document.getElementById('calendar-grid');
+      grid.classList.remove('calendar-month');
+      grid.classList.add('calendar-grid');
+      grid.style.setProperty('--hour-height', `${HOUR_HEIGHT}px`);
+      grid.innerHTML = '';
+
+      const inner = document.createElement('div');
+      inner.className = 'calendar-grid-inner';
+
+      const timeCol = document.createElement('div');
+      timeCol.className = 'calendar-time-col';
+      for (let h = CAL_START_HOUR; h < CAL_END_HOUR; h++) {
+        const label = new Date(2000, 0, 1, h, 0, 0).toLocaleTimeString([], { hour: 'numeric' });
+        const t = document.createElement('div');
+        t.className = 'time';
+        t.textContent = label;
+        timeCol.appendChild(t);
+      }
+      inner.appendChild(timeCol);
+
+      const dayCols = {};
+      for (let i = 0; i < days; i++) {
+        const day = new Date(start);
+        day.setDate(start.getDate() + i);
+        const key = dayKey(day);
+        const col = document.createElement('div');
+        col.className = 'calendar-day-col';
+        col.dataset.day = key;
+        inner.appendChild(col);
+        dayCols[key] = col;
+      }
+
+      grid.appendChild(inner);
+      return dayCols;
+    }
+
+    function placeBlock(dayCols, start, end, className, label, opts = {}) {
+      const key = dayKey(start);
+      const col = dayCols[key];
+      if (!col) return;
+
+      const dayStart = new Date(start);
+      dayStart.setHours(0, 0, 0, 0);
+      const rangeStart = new Date(dayStart);
+      rangeStart.setHours(CAL_START_HOUR, 0, 0, 0);
+      const rangeEnd = new Date(dayStart);
+      rangeEnd.setHours(CAL_END_HOUR, 0, 0, 0);
+
+      const clampStart = start < rangeStart ? rangeStart : start;
+      const clampEnd = end > rangeEnd ? rangeEnd : end;
+      if (clampEnd <= clampStart) return;
+
+      const minutesFromStart = (clampStart - rangeStart) / 60000;
+      const duration = (clampEnd - clampStart) / 60000;
+      const minuteHeight = HOUR_HEIGHT / 60;
+      const top = minutesFromStart * minuteHeight;
+      const height = Math.max(duration * minuteHeight, 12);
+
+      const block = document.createElement('div');
+      block.className = `calendar-block ${className}`;
+      block.style.top = `${top}px`;
+      block.style.height = `${height}px`;
+      if (opts.html) {
+        block.innerHTML = opts.html;
+      } else {
+        block.textContent = label;
+      }
+      block.title = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      if (opts.dataset) {
+        Object.entries(opts.dataset).forEach(([k, v]) => {
+          block.dataset[k] = v;
+        });
+      }
+      col.appendChild(block);
+      return block;
+    }
+
+    function parseAllDayDate(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d, 0, 0, 0);
+    }
+
+    function forEachDaySegment(start, end, cb) {
+      let current = new Date(start);
+      current.setHours(0, 0, 0, 0);
+      while (current < end) {
+        const next = new Date(current);
+        next.setDate(current.getDate() + 1);
+        const segStart = start > current ? start : current;
+        const segEnd = end < next ? end : next;
+        if (segEnd > segStart) cb(segStart, segEnd);
+        current = next;
+      }
+    }
+
+    function renderMonthView() {
+      const grid = document.getElementById('calendar-grid');
+      grid.innerHTML = '';
+      grid.classList.remove('calendar-grid');
+      grid.classList.add('calendar-month');
+
+      const { start, end } = getViewRange();
+      const days = Math.round((end - start) / 86400000);
+      const dayMap = {};
+      for (let i = 0; i < days; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const key = dayKey(d);
+        const cell = document.createElement('div');
+        cell.className = 'month-cell';
+        const dateLabel = document.createElement('div');
+        dateLabel.className = 'date';
+        dateLabel.textContent = d.getDate();
+        const eventsWrap = document.createElement('div');
+        eventsWrap.className = 'events';
+        cell.appendChild(dateLabel);
+        cell.appendChild(eventsWrap);
+        grid.appendChild(cell);
+        dayMap[key] = eventsWrap;
+      }
+
+      (calendarEvents || []).forEach(ev => {
+        const summary = ev.summary || 'Busy';
+        const allDay = !!ev.all_day;
+        let s = allDay ? parseAllDayDate(ev.start) : new Date(ev.start);
+        let e = allDay ? parseAllDayDate(ev.end) : new Date(ev.end);
+        if (allDay && e <= s) {
+          e = new Date(s);
+          e.setDate(e.getDate() + 1);
+        }
+        forEachDaySegment(s, e, (segStart) => {
+          const key = dayKey(segStart);
+          const cell = dayMap[key];
+          if (!cell) return;
+          const chip = document.createElement('div');
+          chip.className = 'month-event';
+          chip.textContent = summary;
+          cell.appendChild(chip);
+        });
+      });
+
+      const pending = (suggestionsCache || []).filter(s => s.status === 'pending');
+      pending.forEach(s => {
+        const st = new Date(s.start_time);
+        const key = dayKey(st);
+        const cell = dayMap[key];
+        if (!cell) return;
+        const chip = document.createElement('div');
+        chip.className = 'month-event';
+        chip.textContent = 'Suggested';
+        cell.appendChild(chip);
+      });
+    }
+
+    function renderSchedule() {
+      const empty = document.getElementById('calendar-empty');
+      const { start } = getViewRange();
+      const days = viewMode === 'day' ? 1 : (viewMode === 'week' ? 7 : 7);
+
+      if (viewMode === 'month') {
+        const header = document.getElementById('calendar-days-header');
+        header.style.gridTemplateColumns = 'repeat(7, 1fr)';
+        header.innerHTML = `
+          <div class="day">Sun</div>
+          <div class="day">Mon</div>
+          <div class="day">Tue</div>
+          <div class="day">Wed</div>
+          <div class="day">Thu</div>
+          <div class="day">Fri</div>
+          <div class="day">Sat</div>
+        `;
+      } else {
+        renderWeekHeader(start, days);
+      }
+
+      if (!calendarConnected) {
+        empty.textContent = 'Connect Google Calendar to see your calendar.';
+        empty.classList.remove('hidden');
+        document.getElementById('calendar-grid').innerHTML = '';
+        return;
+      }
+
+      empty.classList.add('hidden');
+
+      if (viewMode === 'month') {
+        renderMonthView();
+        return;
+      }
+
+      const dayCols = buildCalendarGrid(start, days);
+
+      (calendarBusy || []).forEach(b => {
+        const s = new Date(b.start);
+        const e = new Date(b.end);
+        placeBlock(dayCols, s, e, 'busy', 'Busy');
+      });
+
+      (calendarEvents || []).forEach(ev => {
+        const summary = ev.summary || 'Busy';
+        const allDay = !!ev.all_day;
+        let s = allDay ? parseAllDayDate(ev.start) : new Date(ev.start);
+        let e = allDay ? parseAllDayDate(ev.end) : new Date(ev.end);
+        if (allDay && e <= s) {
+          e = new Date(s);
+          e.setDate(e.getDate() + 1);
+        }
+        forEachDaySegment(s, e, (segStart, segEnd) => {
+          placeBlock(dayCols, segStart, segEnd, 'event', summary, {
+            html: `<div class="block-title">${escapeHtml(summary)}</div>`,
+          });
+        });
+      });
+
+      const pending = (suggestionsCache || []).filter(s => s.status === 'pending');
+      pending.forEach(s => {
+        const st = new Date(s.start_time);
+        const et = new Date(s.end_time);
+        const html = `
+          <div class="block-title">Suggested</div>
+          <div class="block-actions">
+            <button class="suggestion-accept" data-id="${s.id}">Accept</button>
+            <button class="suggestion-decline" data-id="${s.id}">Decline</button>
+          </div>
+        `;
+        placeBlock(dayCols, st, et, 'suggestion', 'Suggested', { html, dataset: { suggestionId: s.id } });
+      });
+
+      document.querySelectorAll('.suggestion-accept').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          approve(btn.dataset.id);
+        };
+      });
+      document.querySelectorAll('.suggestion-decline').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          reject(btn.dataset.id);
+        };
+      });
+    }
+
+    async function loadSchedule() {
+      const { start, end } = getViewRange();
+      if (!calendarConnected || !getToken()) {
+        calendarEvents = [];
+        calendarBusy = [];
+        renderSchedule();
+        return;
+      }
+      try {
+        const res = await api(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`);
+        calendarEvents = Array.isArray(res) ? res : (res.events || []);
+      } catch (e) {
+        calendarEvents = [];
+      }
+      if (viewMode !== 'month') {
+        try {
+          const busy = await api(`/api/calendar/free-busy?start=${start.toISOString()}&end=${end.toISOString()}`);
+          calendarBusy = busy.busy || [];
+        } catch (e) {
+          calendarBusy = [];
+        }
+      } else {
+        calendarBusy = [];
+      }
+      renderSchedule();
+    }
+
     async function loadProfile() {
       if (!getToken()) return;
       const profile = await api('/api/profile');
@@ -321,6 +799,8 @@
       document.querySelector('[name="profile_preferences"]').value = Object.keys(prefs).length
         ? JSON.stringify(prefs, null, 2)
         : '';
+      setCalendarConnected(profile.calendar_connected);
+      loadSchedule();
     }
 
     // profile form handler is set in setupProfileForm when the menu is rendered
@@ -354,9 +834,12 @@
           loadProfile();
           loadTasks();
           loadSuggestions();
-          loadWeekDots();
         } else {
           showLogin();
+          setCalendarConnected(false);
+          calendarEvents = [];
+          suggestionsCache = [];
+          renderSchedule();
         }
         renderAuth();
       });
@@ -365,7 +848,7 @@
     document.getElementById('task-form').onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      await api('/api/tasks', {
+      const created = await api('/api/tasks', {
         method: 'POST',
         body: JSON.stringify({
           name: fd.get('name'),
@@ -377,38 +860,9 @@
       });
       e.target.reset();
       loadTasks();
-    };
-
-    document.getElementById('plan-form').onsubmit = async (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const task = fd.get('plan_task')?.toString().trim();
-      const prefsText = fd.get('plan_preferences')?.toString().trim() || '';
-      if (!task) return;
-      let prefs = null;
-      if (prefsText) {
-        try {
-          prefs = JSON.parse(prefsText);
-        } catch (err) {
-          prefs = { notes: prefsText };
-        }
+      if (created?.id) {
+        await suggestSlots(created.id);
       }
-      const output = document.getElementById('plan-output');
-      output.classList.add('hidden');
-      output.textContent = 'Loading...';
-      try {
-        const res = await api('/api/plan', {
-          method: 'POST',
-          body: JSON.stringify({
-            task,
-            preferences: prefs || null,
-          }),
-        });
-        output.textContent = JSON.stringify(res, null, 2);
-      } catch (err) {
-        output.textContent = err.message || 'Failed to generate plan';
-      }
-      output.classList.remove('hidden');
     };
 
     async function loadTasks() {
@@ -437,20 +891,17 @@
 
     async function suggestSlots(taskId) {
       const start = new Date();
-      start.setDate(start.getDate() - start.getDay());
       start.setHours(0,0,0,0);
       const end = new Date(start);
       end.setDate(end.getDate() + 7);
       try {
         await api(`/api/suggestions/suggest/${taskId}?start=${start.toISOString()}&end=${end.toISOString()}`);
         loadSuggestions();
-        loadWeekDots();
       } catch (e) {
         alert(e.message || 'Failed (connect Google Calendar first)');
       }
     }
 
-    let suggestionsCache = [];
     async function loadSuggestions() {
       const list = await api('/api/suggestions');
       suggestionsCache = list;
@@ -460,7 +911,7 @@
       if (pending.length === 0) {
         el.innerHTML = '';
         empty.classList.remove('hidden');
-        loadWeekDots();
+        renderSchedule();
         return;
       }
         empty.classList.add('hidden');
@@ -484,51 +935,18 @@
       el.querySelectorAll('.reject').forEach(btn => {
         btn.onclick = () => reject(btn.closest('[data-id]').dataset.id);
       });
-      loadWeekDots();
+      renderSchedule();
     }
 
     async function approve(id) {
       await api(`/api/suggestions/${id}/approve`, { method: 'POST', body: JSON.stringify({ add_to_calendar: true }) });
-      loadSuggestions();
-      loadWeekDots();
+      await loadSuggestions();
+      await loadSchedule();
     }
 
     async function reject(id) {
       await api(`/api/suggestions/${id}/reject`, { method: 'POST' });
-      loadSuggestions();
-      loadWeekDots();
-    }
-
-    function loadWeekDots() {
-      const weekDays = document.getElementById('week-days');
-      const weekSlots = document.getElementById('week-slots');
-      const d = new Date();
-      d.setDate(d.getDate() - d.getDay());
-      d.setHours(0, 0, 0, 0);
-      let daysHtml = '';
-      for (let i = 0; i < 7; i++) {
-        const day = new Date(d);
-        day.setDate(d.getDate() + i);
-        daysHtml += `<div class="text-center" data-day="${day.toISOString().slice(0,10)}">${day.toLocaleDateString('en-US', { weekday: 'short' })}<br><span class="text-slate-500">${day.getDate()}</span><div class="dots mt-1 min-h-[24px] flex flex-wrap justify-center gap-0.5"></div></div>`;
-      }
-      weekDays.innerHTML = daysHtml;
-      const pending = suggestionsCache.filter(s => s.status === 'pending');
-      pending.forEach(s => {
-        const start = new Date(s.start_time);
-        const dayKey = start.toISOString().slice(0, 10);
-        const cell = weekDays.querySelector(`[data-day="${dayKey}"] .dots`);
-        if (cell) {
-          const dot = document.createElement('span');
-          dot.className = 'inline-block w-2 h-2 rounded-full bg-teal-500';
-          dot.title = start.toLocaleTimeString() + ' – ' + new Date(s.end_time).toLocaleTimeString();
-          cell.appendChild(dot);
-        }
-      });
-      if (pending.length === 0) {
-        weekSlots.innerHTML = '<p class="text-slate-500 text-sm">Suggestions show as dots above. Add a task → Suggest slots.</p>';
-      } else {
-        weekSlots.innerHTML = '<p class="text-slate-500 text-sm">Dots = suggested times. Approve to add to Google Calendar.</p>';
-      }
+      await loadSuggestions();
     }
 
     document.getElementById('btn-connect-calendar').onclick = (e) => {
@@ -538,18 +956,23 @@
       window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
     };
 
-    if (session) {
-      document.getElementById('calendar-status').textContent = 'Google Calendar: check connection in Settings';
-    }
+    document.getElementById('view-day').onclick = () => setViewMode('day');
+    document.getElementById('view-week').onclick = () => setViewMode('week');
+    document.getElementById('view-month').onclick = () => setViewMode('month');
+    updateViewButtons();
+    renderSchedule();
 
     // URL params
     const params = new URLSearchParams(location.search);
     if (params.get('calendar_connected') === '1') {
-      document.getElementById('calendar-status').textContent = 'Google Calendar connected';
+      setCalendarConnected(true);
+      loadSchedule();
       history.replaceState({}, '', location.pathname);
     }
     if (params.get('calendar_error') === '1') {
+      setCalendarConnected(false);
       document.getElementById('calendar-status').textContent = 'Calendar connection failed';
+      renderSchedule();
       history.replaceState({}, '', location.pathname);
     }
 
@@ -560,7 +983,6 @@
           loadProfile();
           loadTasks();
           loadSuggestions();
-          loadWeekDots();
         }
       })
       .catch((e) => {

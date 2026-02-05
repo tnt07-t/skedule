@@ -9,22 +9,21 @@ router = APIRouter()
 
 
 class DifficultyLevel(str, Enum):
-    LOW = "low"
+    EASY = "easy"
     MEDIUM = "medium"
-    HIGH = "high"
+    HARD = "hard"
 
 
 class FocusLevel(str, Enum):
-    LOW = "low"
+    SHORT = "short"
     MEDIUM = "medium"
-    HIGH = "high"
+    LONG = "long"
 
 
 class TimePreference(str, Enum):
-    MORNING = "morning"
-    AFTERNOON = "afternoon"
-    EVENING = "evening"
-    FLEXIBLE = "flexible"
+    DAY = "day"
+    MIDDAY = "midday"
+    NIGHT = "night"
 
 
 class TaskCreate(BaseModel):
@@ -32,7 +31,6 @@ class TaskCreate(BaseModel):
     name: str
     difficulty: DifficultyLevel
     focus_level: FocusLevel
-    deadline: str  # ISO datetime string
     # Optional fields
     description: Optional[str] = None
     time_preference: Optional[TimePreference] = None
@@ -51,7 +49,6 @@ class TaskUpdate(BaseModel):
     difficulty: Optional[DifficultyLevel] = None
     focus_level: Optional[FocusLevel] = None
     time_preference: Optional[TimePreference] = None
-    deadline: Optional[str] = None
 
 
 @router.get("")
@@ -71,8 +68,6 @@ def create_task(
         "name": body.name,
         "difficulty": body.difficulty.value,
         "focus_level": body.focus_level.value,
-        "deadline": body.deadline,
-        "status": "pending",
     }
     
     # Add optional fields if provided

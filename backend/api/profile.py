@@ -41,6 +41,7 @@ def get_profile(
     if profile:
         if calendar_connected:
             profile["timezone"] = None  # ignore stored timezone if calendar is connected
+        profile["calendar_connected"] = calendar_connected
         return profile
 
     # No profile yet; return defaults
@@ -49,6 +50,7 @@ def get_profile(
         "display_name": "",
         "timezone": None if calendar_connected else "",
         "preferences": {},
+        "calendar_connected": calendar_connected,
     }
 
 
