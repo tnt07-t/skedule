@@ -85,6 +85,9 @@ def get_calendar_service(user_id: str, supabase):
     token_expiry = row.get("token_expiry")
     if isinstance(token_expiry, str):
         token_expiry = datetime.fromisoformat(token_expiry.replace("Z", "+00:00"))
+    if token_expiry and token_expiry.tzinfo is not None:
+        # google-auth compares against a naive utcnow(); keep expiry naive UTC too
+        token_expiry = token_expiry.astimezone(timezone.utc).replace(tzinfo=None)
     creds = Credentials(
         token=row.get("access_token"),
         refresh_token=row.get("refresh_token"),
@@ -94,8 +97,8 @@ def get_calendar_service(user_id: str, supabase):
         scopes=["https://www.googleapis.com/auth/calendar"],
         expiry=token_expiry,
     )
-    exp_naive = token_expiry.replace(tzinfo=None) if token_expiry and getattr(token_expiry, "tzinfo", None) else token_expiry
-    need_refresh = bool(row.get("refresh_token") and (not exp_naive or datetime.utcnow() >= exp_naive))
+    now_naive = datetime.utcnow()
+    need_refresh = bool(row.get("refresh_token") and (not token_expiry or now_naive >= token_expiry))
     if need_refresh:
         resp = httpx.post(
             "https://oauth2.googleapis.com/token",

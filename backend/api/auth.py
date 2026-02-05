@@ -1,4 +1,5 @@
 import logging
+from datetime import timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
@@ -70,13 +71,16 @@ async def google_calendar_callback(
         flow.fetch_token(code=code)
         creds = flow.credentials
         user_id = state
+        expiry = creds.expiry
+        if expiry and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
         supabase = get_supabase()
         supabase.table("calendar_tokens").upsert(
             {
                 "user_id": user_id,
                 "refresh_token": creds.refresh_token,
                 "access_token": creds.token,
-                "token_expiry": creds.expiry.isoformat() if creds.expiry else None,
+                "token_expiry": expiry.isoformat() if expiry else None,
             },
             on_conflict="user_id",
         ).execute()
