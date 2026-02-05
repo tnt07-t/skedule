@@ -531,7 +531,7 @@ const API = 'http://localhost:8000';
       if (!res.ok) throw new Error(await res.text());
       const cfg = await res.json();
       SUPABASE_URL = cfg.supabase_url || '';
-      SUPABASE_ANON_KEY = cfg.supabase_anon_key || '';
+      SUPABASE_ANON_KEY = cfg.supabase_publishable_key || cfg.supabase_anon_key || '';
     }
 
     async function initSupabase() {

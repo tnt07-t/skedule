@@ -1,11 +1,9 @@
 import json
 from datetime import datetime, timedelta, timezone
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    from openai import OpenAI
 
 from api.calendar import get_busy
 from api.deps import get_current_user_id, get_supabase
@@ -17,7 +15,10 @@ router = APIRouter()
 
 class PlanRequest(BaseModel):
     task: str
+    # legacy structured preferences (JSON) kept for compatibility
     preferences: Optional[dict] = None
+    # new free-text preferences
+    preferences_text: Optional[str] = None
     start: Optional[str] = None
     end: Optional[str] = None
 
@@ -52,13 +53,15 @@ def _free_blocks_from_busy(busy: list, start_dt: datetime, end_dt: datetime) -> 
 
 
 def _client():
-    if not settings.openai_api_key:
-        raise HTTPException(500, "OpenAI API key not configured")
+    if not settings.gemini_api_key:
+        raise HTTPException(500, "Gemini API key not configured")
     try:
-        from openai import OpenAI  # type: ignore
+        import google.generativeai as genai  # type: ignore
     except Exception:
-        raise HTTPException(500, "OpenAI SDK not installed. Run: pip install -r backend/requirements.txt")
-    return OpenAI(api_key=settings.openai_api_key)
+        raise HTTPException(500, "Gemini SDK not installed. Run: pip install -r backend/requirements.txt")
+    genai.configure(api_key=settings.gemini_api_key)
+    model_name = settings.gemini_model or "gemini-1.5-pro"
+    return genai.GenerativeModel(model_name)
 
 
 @router.post("")
@@ -83,14 +86,26 @@ def plan_task(
         .execute()
     )
     profile = profile_r.data or {}
-    prefs = body.preferences if body.preferences is not None else profile.get("preferences") or {}
+    prefs_structured = (
+        body.preferences
+        if body.preferences is not None
+        else profile.get("preferences")
+        or {}
+    )
+    prefs_text = (
+        body.preferences_text
+        if body.preferences_text is not None
+        else profile.get("preferences_text")
+        or ""
+    )
 
     busy = get_busy(user_id, supabase, start_dt.isoformat(), end_dt.isoformat())
     free_blocks = _free_blocks_from_busy(busy, start_dt, end_dt)
 
     payload = {
         "task": body.task,
-        "preferences": prefs,
+        "preferences_structured": prefs_structured,
+        "preferences_text": prefs_text,
         "user_profile": {
             "display_name": profile.get("display_name"),
             "timezone": profile.get("timezone") or "UTC",
@@ -99,22 +114,26 @@ def plan_task(
     }
 
     system = (
-        "You are a scheduling assistant. Use the user's task, preferences, and free time blocks to "
-        "estimate total minutes and propose an efficient time-block plan. Respond with JSON only: "
+        "You are a scheduling assistant. Use the user's task, preferences (both structured JSON and free-text), "
+        "and free time blocks to estimate total minutes and propose an efficient time-block plan. "
+        "Interpret free-text preferences creatively (e.g., 'no Fridays', 'prefer mornings', 'deep work before lunch'). "
+        "Respond with JSON only: "
         "{total_estimated_minutes: int, blocks: [{start: string, end: string, duration_minutes: int, reason: string}], notes: string}."
     )
 
     client = _client()
-    resp = client.chat.completions.create(
-        model=settings.openai_model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": json.dumps(payload)},
-        ],
-        temperature=0.2,
-    )
+    try:
+        resp = client.generate_content(
+            [
+                {"role": "system", "parts": [system]},
+                {"role": "user", "parts": [json.dumps(payload)]},
+            ],
+            generation_config={"temperature": 0.2},
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Gemini request failed: {e}") from e
 
-    content = resp.choices[0].message.content or ""
+    content = getattr(resp, "text", "") or ""
     try:
         plan = json.loads(content)
     except Exception:

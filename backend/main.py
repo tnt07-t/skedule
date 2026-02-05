@@ -29,6 +29,8 @@ app.include_router(llm.router, prefix="/api/plan", tags=["plan"])
 def public_config():
     return {
         "supabase_url": settings.supabase_url,
+        "supabase_publishable_key": settings.supabase_publishable_key,
+        # legacy field for older frontends
         "supabase_anon_key": settings.supabase_anon_key,
     }
 
