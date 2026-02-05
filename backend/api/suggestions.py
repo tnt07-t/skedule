@@ -45,10 +45,12 @@ def suggest_slots(
     task_id: str,
     start: str,
     end: str,
+    limit: int = 5,
     user_id: str = Depends(get_current_user_id),
     supabase=Depends(get_supabase),
 ):
     """Compute suggested slots for task and save; return suggestions."""
+    limit = max(1, min(limit, 20))  # clamp between 1 and 20 to avoid overload
     # Get task
     tr = supabase.table("tasks").select("*").eq("id", task_id).eq("user_id", user_id).single().execute()
     if not tr.data:
@@ -73,15 +75,37 @@ def suggest_slots(
             candidates.append((day_start, day_end))
         d += timedelta(days=1)
 
-    all_busy = []
-    for cs, ce in candidates:
-        all_busy.extend(
-            get_busy(user_id, supabase, cs.isoformat(), ce.isoformat())
-        )
+    try:
+        # Clear any pending suggestions for this task to avoid duplicates/clutter
+        supabase.table("suggested_slots").delete().eq("task_id", task_id).eq("user_id", user_id).eq("status", "pending").execute()
+
+        # Treat existing suggestions (pending/approved) as busy so we don't stack on top
+        existing_busy = []
+        for status in ("pending", "approved"):
+            res = (
+                supabase.table("suggested_slots")
+                .select("start_time,end_time")
+                .eq("user_id", user_id)
+                .eq("status", status)
+                .gte("start_time", start_dt.isoformat())
+                .lte("end_time", end_dt.isoformat())
+                .execute()
+            )
+            existing_busy.extend(
+                {"start": row["start_time"], "end": row["end_time"]} for row in (res.data or [])
+            )
+    except Exception as e:
+        raise HTTPException(500, f"Supabase error: {e}")
 
     suggestions_list = []
+    seen = set()  # dedupe by exact start/end within this run
     for cs, ce in candidates:
-        for s_start, s_end in slots_from_busy(all_busy, cs, ce, duration_min):
+        busy = get_busy(user_id, supabase, cs.isoformat(), ce.isoformat()) + existing_busy
+        for s_start, s_end in slots_from_busy(busy, cs, ce, duration_min):
+            key = f"{s_start}|{s_end}"
+            if key in seen:
+                continue
+            seen.add(key)
             r = (
                 supabase.table("suggested_slots")
                 .insert(
@@ -96,6 +120,8 @@ def suggest_slots(
                 .execute()
             )
             suggestions_list.append(r.data[0])
+            if len(suggestions_list) >= limit:
+                return suggestions_list
 
     return suggestions_list
 
@@ -170,3 +196,16 @@ def reject_slot(
     if not r.data or len(r.data) == 0:
         raise HTTPException(404, "Suggestion not found")
     return {"ok": True}
+
+
+@router.post("/reject-all")
+def reject_all(
+    task_id: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
+    supabase=Depends(get_supabase),
+):
+    q = supabase.table("suggested_slots").update({"status": "rejected"}).eq("user_id", user_id).eq("status", "pending")
+    if task_id:
+        q = q.eq("task_id", task_id)
+    r = q.execute()
+    return {"ok": True, "rejected": len(r.data or [])}

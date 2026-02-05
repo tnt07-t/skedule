@@ -11,7 +11,10 @@ router = APIRouter()
 class ProfileUpdate(BaseModel):
     display_name: Optional[str] = None
     timezone: Optional[str] = None
+    # legacy structured prefs (kept for compatibility)
     preferences: Optional[Dict[str, Any]] = None
+    # new free-text preferences
+    preferences_text: Optional[str] = None
 
 
 @router.get("")
@@ -42,6 +45,9 @@ def get_profile(
         if calendar_connected:
             profile["timezone"] = None  # ignore stored timezone if calendar is connected
         profile["calendar_connected"] = calendar_connected
+        # ensure text key is present for frontend
+        if "preferences_text" not in profile:
+            profile["preferences_text"] = profile.get("preferences") or ""
         return profile
 
     # No profile yet; return defaults
@@ -50,6 +56,7 @@ def get_profile(
         "display_name": "",
         "timezone": None if calendar_connected else "",
         "preferences": {},
+        "preferences_text": "",
         "calendar_connected": calendar_connected,
     }
 
@@ -77,6 +84,8 @@ def upsert_profile(
             data["timezone"] = body.timezone
     if body.preferences is not None:
         data["preferences"] = body.preferences
+    if body.preferences_text is not None:
+        data["preferences_text"] = body.preferences_text
     r = (
         supabase.table("user_profiles")
         .upsert(data, on_conflict="user_id")

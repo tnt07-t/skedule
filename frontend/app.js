@@ -1,6 +1,7 @@
 const API = 'http://localhost:8000';
     let SUPABASE_URL = '';
     let SUPABASE_ANON_KEY = '';
+    let suggesting = false;
 
     let sb = null;
     let session = null;
@@ -40,15 +41,6 @@ const API = 'http://localhost:8000';
         e.preventDefault();
         const fd = new FormData(e.target);
         const prefsText = fd.get('profile_preferences')?.toString().trim() || '';
-        let prefs = null;
-        if (prefsText) {
-          try {
-            prefs = JSON.parse(prefsText);
-          } catch (err) {
-            alert('Preferences must be valid JSON or left blank.');
-            return;
-          }
-        }
         const status = document.getElementById('profile-status');
         status.textContent = 'Saving...';
         await api('/api/profile', {
@@ -56,7 +48,7 @@ const API = 'http://localhost:8000';
           body: JSON.stringify({
             display_name: fd.get('display_name') || '',
             timezone: fd.get('timezone') || '',
-            preferences: prefs || {},
+            preferences_text: prefsText,
           }),
         });
         status.textContent = 'Saved';
@@ -91,8 +83,8 @@ const API = 'http://localhost:8000';
                     class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]" />
                 </div>
                 <div>
-                  <label class="block text-sm text-[var(--muted)] mb-1">Preferences (JSON)</label>
-                  <textarea name="profile_preferences" rows="3" placeholder='{"focus":"deep","avoid":["Fridays"]}'
+                  <label class="block text-sm text-[var(--muted)] mb-1">Preferences</label>
+                  <textarea name="profile_preferences" rows="3" placeholder="e.g., Prefer mornings, avoid meetings on Fridays, 90-min deep work."
                     class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]"></textarea>
                 </div>
                 <div class="flex items-center gap-3">
@@ -172,6 +164,8 @@ const API = 'http://localhost:8000';
       viewMode = mode;
       viewAnchor = new Date();
       updateViewButtons();
+      // Render immediately with existing data to avoid lag, then refresh from API
+      renderSchedule();
       loadSchedule();
     }
 
@@ -512,10 +506,12 @@ const API = 'http://localhost:8000';
         tzInput.value = profile.timezone || '';
         tzInput.placeholder = 'America/Los_Angeles';
       }
-      const prefs = profile.preferences || {};
-      document.querySelector('[name="profile_preferences"]').value = Object.keys(prefs).length
-        ? JSON.stringify(prefs, null, 2)
-        : '';
+      const prefsText = profile.preferences_text ?? (
+        typeof profile.preferences === 'string'
+          ? profile.preferences
+          : (profile.preferences ? JSON.stringify(profile.preferences, null, 2) : '')
+      );
+      document.querySelector('[name="profile_preferences"]').value = prefsText;
       setCalendarConnected(profile.calendar_connected);
       loadSchedule();
     }
@@ -591,16 +587,25 @@ const API = 'http://localhost:8000';
       const tasks = await api('/api/tasks');
       const el = document.getElementById('tasks-list');
       el.innerHTML = tasks.map(t => `
-        <div class="p-3 card flex justify-between items-center">
+        <div class="p-3 card flex justify-between items-center pop-in" data-task-id="${t.id}">
           <div>
             <span class="font-medium text-[var(--text)]">${escapeHtml(t.name)}</span>
             <span class="text-[var(--muted)] text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
           </div>
-          <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest slots</button>
+          <div class="flex gap-2">
+            <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest slots</button>
+            <button data-task-id="${t.id}" class="delete-task px-3 py-1.5 text-sm pill bg-[var(--panel-border)] text-[var(--text)]">Delete</button>
+          </div>
         </div>
       `).join('');
       el.querySelectorAll('.suggest-slots').forEach(btn => {
         btn.onclick = () => suggestSlots(btn.dataset.taskId);
+      });
+      el.querySelectorAll('.delete-task').forEach(btn => {
+        btn.onclick = () => {
+          const card = btn.closest('[data-task-id]');
+          deleteTask(btn.dataset.taskId, card);
+        };
       });
     }
 
@@ -610,16 +615,39 @@ const API = 'http://localhost:8000';
       return d.innerHTML;
     }
 
+    function getSuggestCount() {
+      const input = document.getElementById('suggest-count');
+      const v = Number(input?.value || 5);
+      if (Number.isNaN(v)) return 5;
+      return Math.min(20, Math.max(1, v));
+    }
+
+    function setSuggesting(flag) {
+      suggesting = flag;
+      const loader = document.getElementById('suggestions-loading');
+      if (loader) loader.classList.toggle('hidden', !flag);
+      document.querySelectorAll('.suggest-slots').forEach(btn => {
+        btn.disabled = flag;
+        btn.classList.toggle('opacity-50', flag);
+      });
+      const rejectAllBtn = document.getElementById('btn-reject-all');
+      if (rejectAllBtn) rejectAllBtn.disabled = flag;
+    }
+
     async function suggestSlots(taskId) {
       const start = new Date();
       start.setHours(0,0,0,0);
       const end = new Date(start);
       end.setDate(end.getDate() + 7);
       try {
-        await api(`/api/suggestions/suggest/${taskId}?start=${start.toISOString()}&end=${end.toISOString()}`);
+        setSuggesting(true);
+        const limit = getSuggestCount();
+        await api(`/api/suggestions/suggest/${taskId}?start=${start.toISOString()}&end=${end.toISOString()}&limit=${limit}`, { method: 'POST' });
         loadSuggestions();
       } catch (e) {
         alert(e.message || 'Failed (connect Google Calendar first)');
+      } finally {
+        setSuggesting(false);
       }
     }
 
@@ -629,11 +657,20 @@ const API = 'http://localhost:8000';
       const pending = list.filter(s => s.status === 'pending');
       const el = document.getElementById('suggestions-list');
       const empty = document.getElementById('suggestions-empty');
+      const rejectAllBtn = document.getElementById('btn-reject-all');
       if (pending.length === 0) {
         el.innerHTML = '';
         empty.classList.remove('hidden');
+        if (rejectAllBtn) {
+          rejectAllBtn.disabled = true;
+          rejectAllBtn.classList.add('opacity-40', 'cursor-not-allowed');
+        }
         renderSchedule();
         return;
+      }
+      if (rejectAllBtn) {
+        rejectAllBtn.disabled = suggesting;
+        rejectAllBtn.classList.remove('opacity-40', 'cursor-not-allowed');
       }
         empty.classList.add('hidden');
         el.innerHTML = pending.map(s => {
@@ -641,7 +678,7 @@ const API = 'http://localhost:8000';
           const end = new Date(s.end_time);
           const label = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
           return `
-          <div class="p-3 card flex justify-between items-center gap-2" data-id="${s.id}">
+          <div class="p-3 card flex justify-between items-center gap-2 pop-in" data-id="${s.id}">
             <span class="text-xs truncate text-[var(--text)]">${label}</span>
             <span class="flex gap-1">
               <button class="approve px-2 py-1 text-xs btn-accent pill">Add</button>
@@ -651,23 +688,42 @@ const API = 'http://localhost:8000';
         `;
         }).join('');
       el.querySelectorAll('.approve').forEach(btn => {
-        btn.onclick = () => approve(btn.closest('[data-id]').dataset.id);
+        btn.onclick = () => approve(btn.closest('[data-id]').dataset.id, btn.closest('[data-id]'));
       });
       el.querySelectorAll('.reject').forEach(btn => {
-        btn.onclick = () => reject(btn.closest('[data-id]').dataset.id);
+        btn.onclick = () => reject(btn.closest('[data-id]').dataset.id, btn.closest('[data-id]'));
       });
       renderSchedule();
     }
 
-    async function approve(id) {
+    async function approve(id, el) {
+      if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/approve`, { method: 'POST', body: JSON.stringify({ add_to_calendar: true }) });
       await loadSuggestions();
       await loadSchedule();
     }
 
-    async function reject(id) {
+    async function reject(id, el) {
+      if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/reject`, { method: 'POST' });
       await loadSuggestions();
+    }
+
+    async function deleteTask(id, el) {
+      if (el) el.classList.add('shrink-out');
+      await api(`/api/tasks/${id}`, { method: 'DELETE' });
+      // clean up pending suggestions for that task
+      await api(`/api/suggestions/reject-all?task_id=${id}`, { method: 'POST' });
+      await loadTasks();
+      await loadSuggestions();
+      await loadSchedule();
+    }
+
+    async function rejectAll() {
+      document.querySelectorAll('#suggestions-list [data-id]').forEach(el => el.classList.add('shrink-out'));
+      await api('/api/suggestions/reject-all', { method: 'POST' });
+      await loadSuggestions();
+      await loadSchedule();
     }
 
     document.getElementById('btn-connect-calendar').onclick = (e) => {
@@ -676,6 +732,14 @@ const API = 'http://localhost:8000';
       if (!token) { alert('Sign in first.'); return; }
       window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
     };
+
+    const rejectAllBtn = document.getElementById('btn-reject-all');
+    if (rejectAllBtn) {
+      rejectAllBtn.onclick = (e) => {
+        e.preventDefault();
+        rejectAll();
+      };
+    }
 
     document.getElementById('view-day').onclick = () => setViewMode('day');
     document.getElementById('view-week').onclick = () => setViewMode('week');
