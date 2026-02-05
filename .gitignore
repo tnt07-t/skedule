@@ -12,6 +12,13 @@ __pycache__/
 coverage/
 *.log
 *.sqlite3
+*.sqlite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 venv/
 .venv/
 
@@ -27,9 +34,14 @@ build/
 
 # Supabase local
 .supabase/
+supabase/.temp/
+supabase/.branches/
 
 # OS / editor
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+
+# Local database artifacts
+Database
