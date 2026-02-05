@@ -1,5 +1,5 @@
 """Google Calendar free-busy and add event."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -12,25 +12,58 @@ from config import settings
 router = APIRouter()
 
 
-def _selected_calendar_ids(service) -> list[str]:
-    """Return selected/primary calendar ids for the user."""
-    items = service.calendarList().list(minAccessRole="reader").execute().get("items", [])
+def _calendar_items(service, min_access_role: str) -> list[dict]:
+    items: list[dict] = []
+    page_token = None
+    while True:
+        resp = service.calendarList().list(
+            minAccessRole=min_access_role,
+            showHidden=True,
+            pageToken=page_token,
+        ).execute()
+        items.extend(resp.get("items", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return items
+
+
+def _calendar_ids_for_events(service) -> list[str]:
+    """Return calendar ids we can list events from."""
+    items = _calendar_items(service, min_access_role="reader")
     ids: list[str] = []
     for cal in items:
-        if cal.get("selected") or cal.get("primary"):
-            cid = cal.get("id")
-            if cid and cid not in ids:
-                ids.append(cid)
+        cid = cal.get("id")
+        access_role = cal.get("accessRole")
+        if not cid:
+            continue
+        if access_role == "freeBusyReader":
+            continue
+        if cid not in ids:
+            ids.append(cid)
+    if "primary" not in ids:
+        ids.insert(0, "primary")
+    return ids
+
+
+def _calendar_ids_for_busy(service) -> list[str]:
+    """Return calendar ids we can use for free/busy."""
+    items = _calendar_items(service, min_access_role="freeBusyReader")
+    ids: list[str] = []
+    for cal in items:
+        cid = cal.get("id")
+        if cid and cid not in ids:
+            ids.append(cid)
     if "primary" not in ids:
         ids.insert(0, "primary")
     return ids
 
 
 def get_busy(user_id: str, supabase, start: str, end: str) -> list:
-    """Return busy slots from selected calendars (for internal use)."""
+    """Return busy slots from calendars (for internal use)."""
     service = get_calendar_service(user_id, supabase)
     start_dt, end_dt = clamp_range(start, end, max_days=45)
-    cal_ids = _selected_calendar_ids(service)
+    cal_ids = _calendar_ids_for_busy(service)
     body = {
         "timeMin": start_dt.isoformat(),
         "timeMax": end_dt.isoformat(),
@@ -84,7 +117,7 @@ def get_calendar_service(user_id: str, supabase):
         )
         supabase.table("calendar_tokens").update({
             "access_token": data["access_token"],
-            "token_expiry": datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600)),
+            "token_expiry": (datetime.now(timezone.utc) + timedelta(seconds=data.get("expires_in", 3600))).isoformat(),
         }).eq("user_id", user_id).execute()
     return build("calendar", "v3", credentials=creds)
 
@@ -110,17 +143,20 @@ def list_events(
     """Return events from primary calendar."""
     service = get_calendar_service(user_id, supabase)
     start_dt, end_dt = clamp_range(start, end, max_days=45)
-    cal_ids = _selected_calendar_ids(service)
+    cal_ids = _calendar_ids_for_events(service)
     events = []
     for cid in cal_ids:
-        result = service.events().list(
-            calendarId=cid,
-            timeMin=start_dt.isoformat(),
-            timeMax=end_dt.isoformat(),
-            singleEvents=True,
-            orderBy="startTime",
-            maxResults=2500,
-        ).execute()
+        try:
+            result = service.events().list(
+                calendarId=cid,
+                timeMin=start_dt.isoformat(),
+                timeMax=end_dt.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=2500,
+            ).execute()
+        except Exception:
+            continue
         items = result.get("items", [])
         for e in items:
             start_obj = e.get("start", {})

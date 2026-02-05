@@ -191,9 +191,10 @@ const API = 'http://localhost:8000';
         gridEnd.setDate(gridEnd.getDate() + 42);
         return { start: gridStart, end: gridEnd };
       }
-      const end = new Date(anchor);
+      const weekStart = startOfWeek(anchor);
+      const end = new Date(weekStart);
       end.setDate(end.getDate() + 7);
-      return { start: anchor, end };
+      return { start: weekStart, end };
     }
 
     function dayKey(d) {
@@ -201,6 +202,14 @@ const API = 'http://localhost:8000';
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
       return `${y}-${m}-${day}`;
+    }
+
+    function startOfWeek(d) {
+      const date = new Date(d);
+      date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); // 0 = Sunday
+      date.setDate(date.getDate() - day);
+      return date;
     }
 
     function renderWeekHeader(start, days) {
