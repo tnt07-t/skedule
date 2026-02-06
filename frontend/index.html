@@ -88,43 +88,39 @@
         </form>
       </section>
 
-      <!-- Calendar + suggestions -->
+      <!-- Calendar -->
       <section class="mb-2">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-semibold text-white">Calendar</h2>
           <div class="flex flex-wrap items-center gap-3"></div>
         </div>
-        <div class="flex flex-col lg:flex-row gap-4">
-          <!-- Week strip: days with dots for suggestions -->
-          <div id="calendar-week" class="flex-1 p-5 card min-h-[220px]">
-            <div id="calendar-days-header" class="calendar-days-header"></div>
-            <div id="calendar-grid" class="calendar-grid"></div>
-            <p id="calendar-empty" class="text-slate-500 text-sm mt-3 hidden"></p>
-            <div id="calendar-loading" class="loading-overlay hidden">
-              <div class="spinner"></div>
-            </div>
-          </div>
-          <!-- Suggestions list -->
-          <div id="suggestions-panel" class="w-full lg:w-96 p-5 card">
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="text-sm font-semibold text-[var(--text)]">Suggestions</h3>
-              <div class="flex items-center gap-2">
-                <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
-                <button id="btn-reject-all" class="text-xs px-2 py-1 pill bg-white/10 text-white hover:bg-white/20">Reject all</button>
-                <span class="text-xs px-2 py-1 bg-[var(--accent)]/10 text-[var(--accent-strong)] pill">Pending</span>
-              </div>
-            </div>
-            <div id="suggestions-list" class="space-y-2"></div>
-            <p id="suggestions-loading" class="text-[var(--muted)] text-sm hidden">Generating suggestions…</p>
-            <p id="suggestions-empty" class="text-[var(--muted)] text-sm">Add a task and click "Suggest slots" on a task.</p>
+        <div id="calendar-week" class="p-5 card min-h-[220px]">
+          <div id="calendar-days-header" class="calendar-days-header"></div>
+          <div id="calendar-grid" class="calendar-grid"></div>
+          <p id="calendar-empty" class="text-slate-500 text-sm mt-3 hidden"></p>
+          <div id="calendar-loading" class="loading-overlay hidden">
+            <div class="spinner"></div>
           </div>
         </div>
       </section>
 
-      <!-- Tasks list -->
-      <section class="mb-4 p-5 card">
-        <h2 class="text-lg font-semibold mb-3 text-[var(--text)]">Your tasks</h2>
+      <!-- Tasks + suggestions -->
+      <section class="mb-4 p-5 card space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
+          <div class="flex items-center gap-2">
+            <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
+            <button id="btn-reject-all" class="text-xs px-2 py-1 pill bg-white/10 text-white hover:bg-white/20">Reject all</button>
+            <span class="text-xs px-2 py-1 bg-[var(--accent)]/10 text-[var(--accent-strong)] pill">Pending</span>
+          </div>
+        </div>
         <div id="tasks-list" class="space-y-2"></div>
+        <div class="border-t border-[var(--panel-border)] pt-3">
+          <h3 class="text-sm font-semibold text-[var(--text)] mb-2">Suggestions</h3>
+          <div id="suggestions-list" class="space-y-2"></div>
+          <p id="suggestions-loading" class="text-[var(--muted)] text-sm hidden">Generating suggestions…</p>
+          <p id="suggestions-empty" class="text-[var(--muted)] text-sm">Add a task and click "Suggest slots" on a task.</p>
+        </div>
       </section>
     </div>
   </div>

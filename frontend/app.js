@@ -426,14 +426,15 @@ const API = 'http://localhost:8000';
       pending.forEach(s => {
         const st = new Date(s.start_time);
         const et = new Date(s.end_time);
+        const taskName = s.task_name || 'Suggested';
         const html = `
-          <div class="block-title">Suggested</div>
+          <div class="block-title">${escapeHtml(taskName)}</div>
           <div class="block-actions">
             <button class="suggestion-accept" data-id="${s.id}">Accept</button>
             <button class="suggestion-decline" data-id="${s.id}">Decline</button>
           </div>
         `;
-        placeBlock(dayCols, st, et, 'suggestion', 'Suggested', { html, dataset: { suggestionId: s.id } });
+        placeBlock(dayCols, st, et, 'suggestion', taskName, { html, dataset: { suggestionId: s.id } });
       });
 
       document.querySelectorAll('.suggestion-accept').forEach(btn => {

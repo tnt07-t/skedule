@@ -136,6 +136,22 @@ def list_suggestions(
     if task_id:
         q = q.eq("task_id", task_id)
     r = q.order("start_time").execute()
+    # Enrich with task name for frontend display
+    if not r.data:
+        return []
+    task_ids = list({row["task_id"] for row in r.data})
+    task_names = {}
+    if task_ids:
+        names_r = (
+            supabase.table("tasks")
+            .select("id,name")
+            .in_("id", task_ids)
+            .execute()
+        )
+        for row in names_r.data or []:
+            task_names[row["id"]] = row.get("name", "")
+    for row in r.data:
+        row["task_name"] = task_names.get(row["task_id"], "")
     return r.data
 
 
