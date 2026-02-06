@@ -86,7 +86,14 @@ def get_calendar_service(user_id: str, supabase):
         raise HTTPException(400, "Google Calendar token missing; reconnect your calendar.")
     token_expiry = row.get("token_expiry")
     if isinstance(token_expiry, str):
-        token_expiry = datetime.fromisoformat(token_expiry.replace("Z", "+00:00"))
+        raw = token_expiry
+        try:
+            token_expiry = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except Exception:
+            try:
+                token_expiry = datetime.fromisoformat(raw.split(".")[0] + "+00:00")
+            except Exception:
+                token_expiry = None
     if token_expiry and token_expiry.tzinfo is not None:
         # google-auth compares against a naive utcnow(); keep expiry naive UTC too
         token_expiry = token_expiry.astimezone(timezone.utc).replace(tzinfo=None)
