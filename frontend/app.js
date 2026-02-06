@@ -62,10 +62,10 @@ const API = 'http://localhost:8000';
       if (session) {
         el.innerHTML = `
           <div class="relative">
-            <button id="user-menu-button" class="pill bg-white/10 px-3 py-2 text-sm text-white flex items-center gap-2 hover:bg-white/20">
+            <button id="user-menu-button" class="pill bg-black/5 px-3 py-2 text-sm text-black flex items-center gap-2 hover:bg-black/10">
               <span class="pill bg-[var(--accent)] text-white px-2 py-1 text-xs">${session.user?.email?.[0] || 'U'}</span>
               <span class="hidden sm:inline">${session.user?.email || ''}</span>
-              <span class="text-white/70">▾</span>
+              <span class="text-black/60">▾</span>
             </button>
             <div id="user-menu" class="hidden absolute right-0 mt-3 w-80 card p-4 z-50">
               <div class="mb-3">

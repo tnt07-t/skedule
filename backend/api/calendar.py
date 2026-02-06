@@ -82,6 +82,8 @@ def get_calendar_service(user_id: str, supabase):
     if not r.data:
         raise HTTPException(400, "Google Calendar not connected. Connect in Settings.")
     row = r.data
+    if not row.get("access_token") or not row.get("refresh_token"):
+        raise HTTPException(400, "Google Calendar token missing; reconnect your calendar.")
     token_expiry = row.get("token_expiry")
     if isinstance(token_expiry, str):
         token_expiry = datetime.fromisoformat(token_expiry.replace("Z", "+00:00"))
@@ -92,8 +94,8 @@ def get_calendar_service(user_id: str, supabase):
         token=row.get("access_token"),
         refresh_token=row.get("refresh_token"),
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=None,
-        client_secret=None,
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
         scopes=["https://www.googleapis.com/auth/calendar"],
         expiry=token_expiry,
     )

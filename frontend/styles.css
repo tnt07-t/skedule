@@ -1,12 +1,12 @@
 :root {
-      --accent: #f97316;
-      --accent-strong: #ea580c;
-      --panel: rgba(48, 30, 22, 0.92);
-      --panel-border: rgba(255, 255, 255, 0.14);
-      --text: #f9fbff;
-      --muted: #d8e0ec;
-      --bg: linear-gradient(135deg, #2b1308 0%, #3b180a 20%, #4c1f0c 45%, #5f260f 65%, #752f12 85%, #8c3915 100%);
-    }
+  --accent: #f59e0b; /* amber 500 */
+  --accent-strong: #fbbf24; /* amber 400 */
+  --panel: #ffffff;
+  --panel-border: #e5e7eb;
+  --text: #111827;
+  --muted: #6b7280;
+  --bg: #ffffff;
+}
 body {
   font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   background: var(--bg);
@@ -15,36 +15,32 @@ body {
 button {
   transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, opacity 140ms ease;
 }
-button:hover {
-  transform: translateY(-1px) scale(1.01);
-}
-button:active {
-  transform: scale(0.97);
-}
+button:hover { transform: translateY(-1px) scale(1.01); }
+button:active { transform: scale(0.97); }
 .card {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 18px;
-  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(234, 88, 12, 0.18);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
 }
     .pill { border-radius: 999px; }
-    .btn-accent {
-      background: var(--accent);
-      color: #fff;
-      transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
-    }
-    .btn-accent:hover {
-      background: var(--accent-strong);
+.btn-accent {
+  background: var(--accent);
+  color: #ffffff;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.btn-accent:hover {
+  background: var(--accent-strong);
       transform: translateY(-1px);
       box-shadow: 0 10px 30px rgba(234, 88, 12, 0.25);
     }
     input, select, textarea {
-      background: #2a170f !important;
-      border-color: #4a2a1b !important;
-      color: #f9fbff !important;
+      background: #f9fafb !important;
+      border-color: #e5e7eb !important;
+      color: #111827 !important;
     }
     input::placeholder, textarea::placeholder {
-      color: #d8e0ec !important;
+      color: #9ca3af !important;
     }
 .calendar-days-header {
   display: grid;
@@ -53,7 +49,7 @@ button:active {
   margin-bottom: 8px;
   padding: 0 6px;
   font-size: 12px;
-  color: var(--muted);
+  color: #6b7280;
 }
 .calendar-days-header .day {
   text-align: center;
@@ -65,7 +61,7 @@ button:active {
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--panel-border);
-  background: rgba(0, 0, 0, 0.2);
+  background: #f9fafb;
   padding: 0 6px 6px;
 }
 .loading-overlay {
@@ -95,26 +91,26 @@ button:active {
 .calendar-time-col {
   display: flex;
   flex-direction: column;
-      background: rgba(0, 0, 0, 0.15);
-      border-right: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    .calendar-time-col .time {
-      height: var(--hour-height);
-      font-size: 11px;
-      color: var(--muted);
-      padding: 2px 6px;
-    }
-    .calendar-day-col {
-      position: relative;
-      border-left: 1px solid rgba(255, 255, 255, 0.08);
-      background-image: repeating-linear-gradient(
-        to bottom,
-        rgba(255, 255, 255, 0.05) 0,
-        rgba(255, 255, 255, 0.05) 1px,
-        transparent 1px,
-        transparent var(--hour-height)
-      );
-    }
+  background: #f3f4f6;
+  border-right: 1px solid #e5e7eb;
+}
+.calendar-time-col .time {
+  height: var(--hour-height);
+  font-size: 11px;
+  color: #6b7280;
+  padding: 6px 8px;
+}
+.calendar-day-col {
+  position: relative;
+  border-left: 1px solid #e5e7eb;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.04) 0,
+    rgba(0, 0, 0, 0.04) 1px,
+    transparent 1px,
+    transparent var(--hour-height)
+  );
+}
 .calendar-block {
   position: absolute;
   left: 8px;
@@ -123,8 +119,8 @@ button:active {
   padding: 6px 8px;
   font-size: 12px;
   line-height: 1.2;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
   overflow: hidden;
 }
 .calendar-block .block-title {
@@ -156,22 +152,22 @@ button:active {
       background: rgba(0, 0, 0, 0.2);
       color: #fff;
     }
-    .calendar-block.busy {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: #fff;
-      z-index: 1;
-    }
-    .calendar-block.event {
-      background: rgba(255, 255, 255, 0.18);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      color: #fff;
-      z-index: 2;
-    }
+.calendar-block.busy {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #374151;
+  z-index: 1;
+}
+.calendar-block.event {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  color: #111827;
+  z-index: 2;
+}
 .calendar-block.suggestion {
-  background: rgba(234, 88, 12, 0.18);
-  border: 1px dashed rgba(234, 88, 12, 0.7);
-  color: #fff;
+  background: #fff7ed;
+  border: 1px dashed #f59e0b;
+  color: #92400e;
   z-index: 3;
 }
 .pop-in {
@@ -193,31 +189,31 @@ button:active {
       gap: 8px;
       width: 100%;
     }
-    .month-cell {
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      min-height: 110px;
-      padding: 8px;
-      background: rgba(0, 0, 0, 0.18);
-    }
-    .month-cell .date {
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-    .month-cell .events {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .month-event {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      color: #fff;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+.month-cell {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  min-height: 110px;
+  padding: 8px;
+  background: #ffffff;
+}
+.month-cell .date {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+.month-cell .events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.month-event {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

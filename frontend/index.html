@@ -13,14 +13,14 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="min-h-screen">
-  <div id="app" class="max-w-7xl mx-auto px-6 py-5 w-full">
+  <div id="app" class="max-w-7xl mx-auto px-6 py-4 w-full">
     <!-- Header -->
-    <header class="flex justify-between items-center mb-8 pb-4 border-b border-white/10 relative">
+    <header class="flex justify-between items-center mb-3 pb-2 border-b border-white/10 relative">
       <div>
-        <p class="text-sm text-white/70 tracking-wide uppercase">Plan your focus</p>
-        <h1 class="text-3xl font-semibold text-white">Skedule</h1>
+        <p class="text-sm text-gray-500 tracking-wide uppercase">Plan your focus</p>
+        <h1 class="text-3xl font-semibold text-black">Skedule</h1>
       </div>
-      <div id="auth-area" class="text-white relative"></div>
+      <div id="auth-area" class="text-black relative"></div>
     </header>
 
     <!-- Login -->
@@ -91,7 +91,7 @@
       <!-- Calendar -->
       <section class="mb-2">
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-semibold text-white">Calendar</h2>
+          <h2 class="text-lg font-semibold text-black">Calendar</h2>
           <div class="flex flex-wrap items-center gap-3"></div>
         </div>
         <div id="calendar-week" class="p-5 card min-h-[220px]">
@@ -110,7 +110,7 @@
           <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
           <div class="flex items-center gap-2">
             <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
-            <button id="btn-reject-all" class="text-xs px-2 py-1 pill bg-white/10 text-white hover:bg-white/20">Reject all</button>
+            <button id="btn-reject-all" class="text-xs px-2 py-1 pill bg-white/60 text-black hover:bg-white">Reject all</button>
             <span class="text-xs px-2 py-1 bg-[var(--accent)]/10 text-[var(--accent-strong)] pill">Pending</span>
           </div>
         </div>
