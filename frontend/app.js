@@ -2,6 +2,7 @@ const API = 'http://localhost:8000';
     let SUPABASE_URL = '';
     let SUPABASE_ANON_KEY = '';
     let suggesting = false;
+    let calendarLoading = false;
 
     let sb = null;
     let session = null;
@@ -9,12 +10,12 @@ const API = 'http://localhost:8000';
     let calendarEvents = [];
     let calendarBusy = [];
     let suggestionsCache = [];
-    let viewMode = 'week';
+    let viewMode = 'week'; // default and only mode now
     let viewAnchor = new Date();
 
     const CAL_START_HOUR = 6;
     const CAL_END_HOUR = 22;
-    const HOUR_HEIGHT = 48;
+    const HOUR_HEIGHT = 64;
 
     function getToken() {
       return session?.access_token || '';
@@ -142,29 +143,11 @@ const API = 'http://localhost:8000';
       }
     }
 
-    function updateViewButtons() {
-      const map = {
-        day: document.getElementById('view-day'),
-        week: document.getElementById('view-week'),
-        month: document.getElementById('view-month'),
-      };
-      Object.entries(map).forEach(([mode, btn]) => {
-        if (!btn) return;
-        if (mode === viewMode) {
-          btn.classList.add('btn-accent');
-          btn.classList.remove('bg-white/10');
-        } else {
-          btn.classList.remove('btn-accent');
-          btn.classList.add('bg-white/10');
-        }
-      });
-    }
+    function updateViewButtons() {}
 
     function setViewMode(mode) {
-      viewMode = mode;
+      viewMode = 'week';
       viewAnchor = new Date();
-      updateViewButtons();
-      // Render immediately with existing data to avoid lag, then refresh from API
       renderSchedule();
       loadSchedule();
     }
@@ -176,14 +159,6 @@ const API = 'http://localhost:8000';
         const end = new Date(anchor);
         end.setDate(end.getDate() + 1);
         return { start: anchor, end };
-      }
-      if (viewMode === 'month') {
-        const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-        const gridStart = new Date(monthStart);
-        gridStart.setDate(monthStart.getDate() - monthStart.getDay());
-        const gridEnd = new Date(gridStart);
-        gridEnd.setDate(gridEnd.getDate() + 42);
-        return { start: gridStart, end: gridEnd };
       }
       const weekStart = startOfWeek(anchor);
       const end = new Date(weekStart);
@@ -208,7 +183,7 @@ const API = 'http://localhost:8000';
 
     function renderWeekHeader(start, days) {
       const header = document.getElementById('calendar-days-header');
-      header.style.gridTemplateColumns = `64px repeat(${days}, 1fr)`;
+      header.style.gridTemplateColumns = `72px repeat(${days}, 1fr)`;
       let html = '<div></div>';
       for (let i = 0; i < days; i++) {
         const day = new Date(start);
@@ -276,18 +251,19 @@ const API = 'http://localhost:8000';
       const duration = (clampEnd - clampStart) / 60000;
       const minuteHeight = HOUR_HEIGHT / 60;
       const top = minutesFromStart * minuteHeight;
-      const height = Math.max(duration * minuteHeight, 12);
+      const height = Math.max(duration * minuteHeight, 24);
 
       const block = document.createElement('div');
       block.className = `calendar-block ${className}`;
       block.style.top = `${top}px`;
       block.style.height = `${height}px`;
-      if (opts.html) {
-        block.innerHTML = opts.html;
-      } else {
-        block.textContent = label;
-      }
-      block.title = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      const contentHtml = opts.html !== undefined
+        ? opts.html
+        : `<div class="block-title">${escapeHtml(label)}</div>`;
+      block.innerHTML = contentHtml;
+      const titleLabel = opts.title !== undefined ? opts.title : label;
+      const timeRange = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      block.title = titleLabel ? `${titleLabel} • ${timeRange}` : timeRange;
       if (opts.dataset) {
         Object.entries(opts.dataset).forEach(([k, v]) => {
           block.dataset[k] = v;
@@ -338,8 +314,23 @@ const API = 'http://localhost:8000';
         cell.appendChild(dateLabel);
         cell.appendChild(eventsWrap);
         grid.appendChild(cell);
-        dayMap[key] = eventsWrap;
+        dayMap[key] = { wrap: eventsWrap, count: 0, overflow: 0 };
       }
+
+      const addChip = (key, label) => {
+        const entry = dayMap[key];
+        if (!entry) return;
+        if (entry.count < 3) {
+          const chip = document.createElement('div');
+          chip.className = 'month-event';
+          chip.textContent = label;
+          chip.title = label;
+          entry.wrap.appendChild(chip);
+          entry.count += 1;
+        } else {
+          entry.overflow += 1;
+        }
+      };
 
       (calendarEvents || []).forEach(ev => {
         const summary = ev.summary || 'Busy';
@@ -352,12 +343,10 @@ const API = 'http://localhost:8000';
         }
         forEachDaySegment(s, e, (segStart) => {
           const key = dayKey(segStart);
-          const cell = dayMap[key];
-          if (!cell) return;
-          const chip = document.createElement('div');
-          chip.className = 'month-event';
-          chip.textContent = summary;
-          cell.appendChild(chip);
+          const timeLabel = allDay
+            ? 'All day'
+            : `${segStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+          addChip(key, `${summary} • ${timeLabel}`);
         });
       });
 
@@ -365,12 +354,17 @@ const API = 'http://localhost:8000';
       pending.forEach(s => {
         const st = new Date(s.start_time);
         const key = dayKey(st);
-        const cell = dayMap[key];
-        if (!cell) return;
-        const chip = document.createElement('div');
-        chip.className = 'month-event';
-        chip.textContent = 'Suggested';
-        cell.appendChild(chip);
+        addChip(key, 'Suggested');
+      });
+
+      Object.values(dayMap).forEach(entry => {
+        if (entry.overflow > 0) {
+          const chip = document.createElement('div');
+          chip.className = 'month-event';
+          chip.textContent = `+${entry.overflow} more`;
+          chip.title = `${entry.overflow} more items`;
+          entry.wrap.appendChild(chip);
+        }
       });
     }
 
@@ -404,17 +398,12 @@ const API = 'http://localhost:8000';
 
       empty.classList.add('hidden');
 
-      if (viewMode === 'month') {
-        renderMonthView();
-        return;
-      }
-
       const dayCols = buildCalendarGrid(start, days);
 
       (calendarBusy || []).forEach(b => {
         const s = new Date(b.start);
         const e = new Date(b.end);
-        placeBlock(dayCols, s, e, 'busy', 'Busy');
+        placeBlock(dayCols, s, e, 'busy', 'Busy', { html: '', title: 'Busy' });
       });
 
       (calendarEvents || []).forEach(ev => {
@@ -463,10 +452,12 @@ const API = 'http://localhost:8000';
 
     async function loadSchedule() {
       const { start, end } = getViewRange();
+      setCalendarLoading(true);
       if (!getToken()) {
         calendarEvents = [];
         calendarBusy = [];
         renderSchedule();
+        setCalendarLoading(false);
         return;
       }
       try {
@@ -479,7 +470,7 @@ const API = 'http://localhost:8000';
           setCalendarConnected(false);
         }
       }
-      if (viewMode !== 'month' && calendarConnected) {
+      if (calendarConnected) {
         try {
           const busy = await api(`/api/calendar/free-busy?start=${start.toISOString()}&end=${end.toISOString()}`);
           calendarBusy = busy.busy || [];
@@ -490,6 +481,7 @@ const API = 'http://localhost:8000';
         calendarBusy = [];
       }
       renderSchedule();
+      setCalendarLoading(false);
     }
 
     async function loadProfile() {
@@ -615,11 +607,17 @@ const API = 'http://localhost:8000';
       return d.innerHTML;
     }
 
+    function setCalendarLoading(flag) {
+      calendarLoading = flag;
+      const overlay = document.getElementById('calendar-loading');
+      if (overlay) overlay.classList.toggle('hidden', !flag);
+    }
+
     function getSuggestCount() {
       const input = document.getElementById('suggest-count');
-      const v = Number(input?.value || 5);
-      if (Number.isNaN(v)) return 5;
-      return Math.min(20, Math.max(1, v));
+      const v = Number(String(input?.value || '').replace(/[^0-9]/g, ''));
+      if (Number.isNaN(v) || v <= 0) return 5;
+      return Math.min(20, v);
     }
 
     function setSuggesting(flag) {
@@ -741,9 +739,6 @@ const API = 'http://localhost:8000';
       };
     }
 
-    document.getElementById('view-day').onclick = () => setViewMode('day');
-    document.getElementById('view-week').onclick = () => setViewMode('week');
-    document.getElementById('view-month').onclick = () => setViewMode('month');
     updateViewButtons();
     renderSchedule();
 

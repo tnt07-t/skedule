@@ -46,34 +46,55 @@ button:active {
     input::placeholder, textarea::placeholder {
       color: #d8e0ec !important;
     }
-    .calendar-days-header {
-      display: grid;
-      grid-template-columns: 64px repeat(7, 1fr);
-      gap: 0;
-      margin-bottom: 8px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .calendar-days-header .day {
-      text-align: center;
+.calendar-days-header {
+  display: grid;
+  grid-template-columns: 72px repeat(7, 1fr);
+  column-gap: 8px;
+  margin-bottom: 8px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.calendar-days-header .day {
+  text-align: center;
       padding: 4px 0;
     }
-    .calendar-grid {
-      position: relative;
-      height: 768px;
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--panel-border);
-      background: rgba(0, 0, 0, 0.2);
-    }
-    .calendar-grid-inner {
-      display: grid;
-      grid-template-columns: 64px repeat(7, 1fr);
-      height: 100%;
-    }
-    .calendar-time-col {
-      display: flex;
-      flex-direction: column;
+.calendar-grid {
+  position: relative;
+  height: 768px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0 6px 6px;
+}
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+}
+.spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 4px solid rgba(255,255,255,0.25);
+  border-top-color: #fff;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.calendar-grid-inner {
+  display: grid;
+  grid-template-columns: 72px repeat(7, 1fr);
+  column-gap: 8px;
+  height: 100%;
+}
+.calendar-time-col {
+  display: flex;
+  flex-direction: column;
       background: rgba(0, 0, 0, 0.15);
       border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
@@ -94,20 +115,27 @@ button:active {
         transparent var(--hour-height)
       );
     }
-    .calendar-block {
-      position: absolute;
-      left: 8px;
-      right: 8px;
-      border-radius: 8px;
-      padding: 4px 6px;
-      font-size: 11px;
-      line-height: 1.2;
-    }
-    .calendar-block .block-title {
-      font-weight: 600;
-      font-size: 11px;
-      margin-bottom: 2px;
-    }
+.calendar-block {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+.calendar-block .block-title {
+  font-weight: 600;
+  font-size: 11px;
+  margin-bottom: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
     .calendar-block .block-actions {
       display: flex;
       gap: 6px;
@@ -161,8 +189,9 @@ button:active {
 }
     .calendar-month {
       display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 6px;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      width: 100%;
     }
     .month-cell {
       border: 1px solid rgba(255, 255, 255, 0.08);

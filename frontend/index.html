@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="min-h-screen">
-  <div id="app" class="max-w-5xl mx-auto p-5">
+  <div id="app" class="max-w-7xl mx-auto px-6 py-5 w-full">
     <!-- Header -->
     <header class="flex justify-between items-center mb-8 pb-4 border-b border-white/10 relative">
       <div>
@@ -92,11 +92,7 @@
       <section class="mb-2">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-semibold text-white">Calendar</h2>
-          <div class="flex flex-wrap items-center gap-3">
-            <button id="view-day" class="px-3 py-1 text-xs pill bg-white/10 text-white">Day</button>
-            <button id="view-week" class="px-3 py-1 text-xs pill bg-white/10 text-white">Week</button>
-            <button id="view-month" class="px-3 py-1 text-xs pill bg-white/10 text-white">Month</button>
-          </div>
+          <div class="flex flex-wrap items-center gap-3"></div>
         </div>
         <div class="flex flex-col lg:flex-row gap-4">
           <!-- Week strip: days with dots for suggestions -->
@@ -104,13 +100,16 @@
             <div id="calendar-days-header" class="calendar-days-header"></div>
             <div id="calendar-grid" class="calendar-grid"></div>
             <p id="calendar-empty" class="text-slate-500 text-sm mt-3 hidden"></p>
+            <div id="calendar-loading" class="loading-overlay hidden">
+              <div class="spinner"></div>
+            </div>
           </div>
           <!-- Suggestions list -->
-          <div id="suggestions-panel" class="w-full lg:w-72 p-5 card">
+          <div id="suggestions-panel" class="w-full lg:w-96 p-5 card">
             <div class="flex items-center justify-between mb-2">
               <h3 class="text-sm font-semibold text-[var(--text)]">Suggestions</h3>
               <div class="flex items-center gap-2">
-                <input id="suggest-count" type="number" min="1" max="20" value="5" class="w-12 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
+                <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
                 <button id="btn-reject-all" class="text-xs px-2 py-1 pill bg-white/10 text-white hover:bg-white/20">Reject all</button>
                 <span class="text-xs px-2 py-1 bg-[var(--accent)]/10 text-[var(--accent-strong)] pill">Pending</span>
               </div>
