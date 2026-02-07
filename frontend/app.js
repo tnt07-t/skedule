@@ -10,12 +10,14 @@ const API = 'http://localhost:8000';
     let calendarEvents = [];
     let calendarBusy = [];
     let calendarFree = [];
+    const calendarCache = new Map();
+    const CAL_CACHE_TTL_MS = 10 * 60 * 1000;
     let suggestionsCache = [];
     let viewMode = 'week'; // default and only mode now
     let viewAnchor = new Date();
 
-    const CAL_START_HOUR = 6;
-    const CAL_END_HOUR = 22;
+    const CAL_START_HOUR = 0;
+    const CAL_END_HOUR = 24;
     const HOUR_HEIGHT = 64;
 
     function getToken() {
@@ -141,13 +143,58 @@ const API = 'http://localhost:8000';
       } else {
         status.textContent = 'Google Calendar not connected';
         btn.classList.remove('hidden');
+        calendarCache.clear();
       }
     }
 
     function updateViewButtons() {}
 
+    function formatRangeLabel(start, endExclusive) {
+      const end = new Date(endExclusive);
+      end.setDate(end.getDate() - 1);
+      if (viewMode === 'day') {
+        return start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const sameYear = start.getFullYear() === end.getFullYear();
+      const sameMonth = sameYear && start.getMonth() === end.getMonth();
+      if (sameMonth) {
+        const month = start.toLocaleDateString('en-US', { month: 'short' });
+        return `${month} ${start.getDate()}–${end.getDate()}, ${start.getFullYear()}`;
+      }
+      if (sameYear) {
+        const left = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const right = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `${left} – ${right}, ${start.getFullYear()}`;
+      }
+      const left = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const right = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `${left} – ${right}`;
+    }
+
+    function updateViewLabel() {
+      const el = document.getElementById('calendar-range');
+      if (!el) return;
+      const { start, end } = getViewRange();
+      el.textContent = formatRangeLabel(start, end);
+    }
+
     function setViewMode(mode) {
       viewMode = 'week';
+      viewAnchor = new Date();
+      renderSchedule();
+      loadSchedule();
+    }
+
+    function shiftWeek(delta) {
+      const d = new Date(viewAnchor);
+      const step = viewMode === 'day' ? 1 : 7;
+      d.setDate(d.getDate() + (step * delta));
+      viewAnchor = d;
+      renderSchedule();
+      loadSchedule();
+    }
+
+    function goToToday() {
       viewAnchor = new Date();
       renderSchedule();
       loadSchedule();
@@ -200,6 +247,7 @@ const API = 'http://localhost:8000';
       grid.classList.remove('calendar-month');
       grid.classList.add('calendar-grid');
       grid.style.setProperty('--hour-height', `${HOUR_HEIGHT}px`);
+      grid.style.height = `${(CAL_END_HOUR - CAL_START_HOUR) * HOUR_HEIGHT}px`;
       grid.innerHTML = '';
 
       const inner = document.createElement('div');
@@ -374,6 +422,8 @@ const API = 'http://localhost:8000';
       const { start } = getViewRange();
       const days = viewMode === 'day' ? 1 : (viewMode === 'week' ? 7 : 7);
 
+      updateViewLabel();
+
       if (viewMode === 'month') {
         const header = document.getElementById('calendar-days-header');
         header.style.gridTemplateColumns = 'repeat(7, 1fr)';
@@ -452,13 +502,39 @@ const API = 'http://localhost:8000';
       });
     }
 
-    async function loadSchedule() {
+    function getWeekCacheKey(start, end) {
+      return `${start.toISOString()}|${end.toISOString()}`;
+    }
+
+    function getCachedWeek(start, end) {
+      const key = getWeekCacheKey(start, end);
+      const cached = calendarCache.get(key);
+      if (!cached) return null;
+      if ((Date.now() - cached.fetchedAt) > CAL_CACHE_TTL_MS) {
+        calendarCache.delete(key);
+        return null;
+      }
+      return cached;
+    }
+
+    async function loadSchedule(opts = {}) {
       const { start, end } = getViewRange();
+      if (!opts.force) {
+        const cached = getCachedWeek(start, end);
+        if (cached) {
+          calendarEvents = cached.events || [];
+          calendarBusy = cached.busy || [];
+          calendarFree = cached.free || [];
+          renderSchedule();
+          return;
+        }
+      }
       setCalendarLoading(true);
       if (!getToken()) {
         calendarEvents = [];
         calendarBusy = [];
         calendarFree = [];
+        calendarCache.clear();
         renderSchedule();
         setCalendarLoading(false);
         return;
@@ -468,6 +544,12 @@ const API = 'http://localhost:8000';
         calendarEvents = Array.isArray(res) ? res : (res.events || []);
         calendarBusy = res.busy || [];
         calendarFree = res.free || [];
+        calendarCache.set(getWeekCacheKey(start, end), {
+          events: calendarEvents,
+          busy: calendarBusy,
+          free: calendarFree,
+          fetchedAt: Date.now(),
+        });
         setCalendarConnected(true);
       } catch (e) {
         calendarEvents = [];
@@ -693,7 +775,7 @@ const API = 'http://localhost:8000';
       if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/approve`, { method: 'POST', body: JSON.stringify({ add_to_calendar: true }) });
       await loadSuggestions();
-      await loadSchedule();
+      await loadSchedule({ force: true });
     }
 
     async function reject(id, el) {
@@ -725,6 +807,28 @@ const API = 'http://localhost:8000';
       if (!token) { alert('Sign in first.'); return; }
       window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
     };
+
+    const prevWeekBtn = document.getElementById('calendar-prev');
+    if (prevWeekBtn) {
+      prevWeekBtn.onclick = (e) => {
+        e.preventDefault();
+        shiftWeek(-1);
+      };
+    }
+    const nextWeekBtn = document.getElementById('calendar-next');
+    if (nextWeekBtn) {
+      nextWeekBtn.onclick = (e) => {
+        e.preventDefault();
+        shiftWeek(1);
+      };
+    }
+    const todayBtn = document.getElementById('calendar-today');
+    if (todayBtn) {
+      todayBtn.onclick = (e) => {
+        e.preventDefault();
+        goToToday();
+      };
+    }
 
     const rejectAllBtn = document.getElementById('btn-reject-all');
     if (rejectAllBtn) {

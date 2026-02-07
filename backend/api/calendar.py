@@ -11,6 +11,8 @@ from config import settings
 
 router = APIRouter()
 
+CACHE_TTL_SECONDS = 1800
+
 
 def _calendar_items(service, min_access_role: str) -> list[dict]:
     items: list[dict] = []
@@ -227,13 +229,58 @@ def week_summary(
     supabase=Depends(get_supabase),
 ):
     """Return events, busy, and free blocks for a week."""
-    service = get_calendar_service(user_id, supabase)
     start_dt, end_dt = clamp_range(start, end, max_days=7)
+    cache_start = start_dt.isoformat()
+    cache_end = end_dt.isoformat()
+    now = datetime.now(timezone.utc)
+    try:
+        cached = (
+            supabase.table("calendar_week_cache")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("week_start", cache_start)
+            .eq("week_end", cache_end)
+            .order("fetched_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if cached.data:
+            row = cached.data[0]
+            fetched_at = row.get("fetched_at")
+            if isinstance(fetched_at, str):
+                fetched_at = parse_iso(fetched_at)
+            if fetched_at and fetched_at.tzinfo is None:
+                fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+            if fetched_at and (now - fetched_at).total_seconds() <= CACHE_TTL_SECONDS:
+                return {
+                    "events": row.get("events", []),
+                    "busy": row.get("busy", []),
+                    "free": row.get("free", []),
+                }
+    except Exception:
+        pass
+
+    service = get_calendar_service(user_id, supabase)
     cal_ids = _calendar_ids_for_events(service)
     events = _list_events(service, start_dt, end_dt, cal_ids)
     busy = _fetch_busy(service, start_dt, end_dt, cal_ids)
     free = _free_from_busy(busy, start_dt, end_dt)
-    return {"events": events, "busy": busy, "free": free}
+    payload = {"events": events, "busy": busy, "free": free}
+    try:
+        supabase.table("calendar_week_cache").upsert(
+            {
+                "user_id": user_id,
+                "week_start": cache_start,
+                "week_end": cache_end,
+                "events": events,
+                "busy": busy,
+                "free": free,
+                "fetched_at": now.isoformat(),
+            }
+        ).execute()
+    except Exception:
+        pass
+    return payload
 
 
 @router.post("/events")
