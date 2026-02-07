@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 import httpx
 
 from api.deps import get_current_user_id, get_supabase
-from api.time_utils import clamp_range
+from api.time_utils import clamp_range, parse_iso
 from config import settings
 
 router = APIRouter()
@@ -30,40 +30,15 @@ def _calendar_items(service, min_access_role: str) -> list[dict]:
 
 def _calendar_ids_for_events(service) -> list[str]:
     """Return calendar ids we can list events from."""
-    items = _calendar_items(service, min_access_role="reader")
-    ids: list[str] = []
-    for cal in items:
-        cid = cal.get("id")
-        access_role = cal.get("accessRole")
-        if not cid:
-            continue
-        if access_role == "freeBusyReader":
-            continue
-        if cid not in ids:
-            ids.append(cid)
-    if "primary" not in ids:
-        ids.insert(0, "primary")
-    return ids
+    return ["primary"]
 
 
 def _calendar_ids_for_busy(service) -> list[str]:
     """Return calendar ids we can use for free/busy."""
-    items = _calendar_items(service, min_access_role="freeBusyReader")
-    ids: list[str] = []
-    for cal in items:
-        cid = cal.get("id")
-        if cid and cid not in ids:
-            ids.append(cid)
-    if "primary" not in ids:
-        ids.insert(0, "primary")
-    return ids
+    return ["primary"]
 
 
-def get_busy(user_id: str, supabase, start: str, end: str) -> list:
-    """Return busy slots from calendars (for internal use)."""
-    service = get_calendar_service(user_id, supabase)
-    start_dt, end_dt = clamp_range(start, end, max_days=45)
-    cal_ids = _calendar_ids_for_busy(service)
+def _fetch_busy(service, start_dt: datetime, end_dt: datetime, cal_ids: list[str]) -> list[dict]:
     body = {
         "timeMin": start_dt.isoformat(),
         "timeMax": end_dt.isoformat(),
@@ -71,10 +46,95 @@ def get_busy(user_id: str, supabase, start: str, end: str) -> list:
     }
     result = service.freebusy().query(body=body).execute()
     calendars = result.get("calendars", {})
-    busy = []
+    busy: list[dict] = []
     for cid in cal_ids:
         busy.extend(calendars.get(cid, {}).get("busy", []))
     return busy
+
+
+def _list_events(service, start_dt: datetime, end_dt: datetime, cal_ids: list[str]) -> list[dict]:
+    events: list[dict] = []
+    for cid in cal_ids:
+        try:
+            result = service.events().list(
+                calendarId=cid,
+                timeMin=start_dt.isoformat(),
+                timeMax=end_dt.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=2500,
+            ).execute()
+        except Exception:
+            continue
+        items = result.get("items", [])
+        for e in items:
+            start_obj = e.get("start", {})
+            end_obj = e.get("end", {})
+            if "dateTime" in start_obj:
+                start_val = start_obj.get("dateTime")
+                end_val = end_obj.get("dateTime")
+                all_day = False
+            else:
+                start_val = start_obj.get("date")
+                end_val = end_obj.get("date")
+                all_day = True
+            events.append(
+                {
+                    "id": e.get("id"),
+                    "summary": e.get("summary", "Busy"),
+                    "start": start_val,
+                    "end": end_val,
+                    "all_day": all_day,
+                }
+            )
+    return events
+
+
+def _free_from_busy(busy: list[dict], start_dt: datetime, end_dt: datetime) -> list[dict]:
+    intervals = []
+    for b in busy:
+        try:
+            b_start = parse_iso(b["start"])
+            b_end = parse_iso(b["end"])
+        except Exception:
+            continue
+        if b_end <= start_dt or b_start >= end_dt:
+            continue
+        if b_start < start_dt:
+            b_start = start_dt
+        if b_end > end_dt:
+            b_end = end_dt
+        if b_end > b_start:
+            intervals.append((b_start, b_end))
+    if not intervals:
+        return [{"start": start_dt.isoformat(), "end": end_dt.isoformat()}]
+    intervals.sort(key=lambda x: x[0])
+    merged = [intervals[0]]
+    for s, e in intervals[1:]:
+        last_s, last_e = merged[-1]
+        if s <= last_e:
+            if e > last_e:
+                merged[-1] = (last_s, e)
+        else:
+            merged.append((s, e))
+    free = []
+    cursor = start_dt
+    for s, e in merged:
+        if s > cursor:
+            free.append({"start": cursor.isoformat(), "end": s.isoformat()})
+        if e > cursor:
+            cursor = e
+    if cursor < end_dt:
+        free.append({"start": cursor.isoformat(), "end": end_dt.isoformat()})
+    return free
+
+
+def get_busy(user_id: str, supabase, start: str, end: str) -> list:
+    """Return busy slots from calendars (for internal use)."""
+    service = get_calendar_service(user_id, supabase)
+    start_dt, end_dt = clamp_range(start, end, max_days=45)
+    cal_ids = _calendar_ids_for_busy(service)
+    return _fetch_busy(service, start_dt, end_dt, cal_ids)
 
 
 def get_calendar_service(user_id: str, supabase):
@@ -156,41 +216,24 @@ def list_events(
     service = get_calendar_service(user_id, supabase)
     start_dt, end_dt = clamp_range(start, end, max_days=45)
     cal_ids = _calendar_ids_for_events(service)
-    events = []
-    for cid in cal_ids:
-        try:
-            result = service.events().list(
-                calendarId=cid,
-                timeMin=start_dt.isoformat(),
-                timeMax=end_dt.isoformat(),
-                singleEvents=True,
-                orderBy="startTime",
-                maxResults=2500,
-            ).execute()
-        except Exception:
-            continue
-        items = result.get("items", [])
-        for e in items:
-            start_obj = e.get("start", {})
-            end_obj = e.get("end", {})
-            if "dateTime" in start_obj:
-                start_val = start_obj.get("dateTime")
-                end_val = end_obj.get("dateTime")
-                all_day = False
-            else:
-                start_val = start_obj.get("date")
-                end_val = end_obj.get("date")
-                all_day = True
-            events.append(
-                {
-                    "id": e.get("id"),
-                    "summary": e.get("summary", "Busy"),
-                    "start": start_val,
-                    "end": end_val,
-                    "all_day": all_day,
-                }
-            )
-    return events
+    return _list_events(service, start_dt, end_dt, cal_ids)
+
+
+@router.get("/week")
+def week_summary(
+    start: str,
+    end: str,
+    user_id: str = Depends(get_current_user_id),
+    supabase=Depends(get_supabase),
+):
+    """Return events, busy, and free blocks for a week."""
+    service = get_calendar_service(user_id, supabase)
+    start_dt, end_dt = clamp_range(start, end, max_days=7)
+    cal_ids = _calendar_ids_for_events(service)
+    events = _list_events(service, start_dt, end_dt, cal_ids)
+    busy = _fetch_busy(service, start_dt, end_dt, cal_ids)
+    free = _free_from_busy(busy, start_dt, end_dt)
+    return {"events": events, "busy": busy, "free": free}
 
 
 @router.post("/events")
