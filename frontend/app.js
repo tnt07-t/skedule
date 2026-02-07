@@ -93,6 +93,27 @@ const API = 'http://localhost:8000';
                   <textarea name="profile_preferences" rows="3" placeholder="e.g., Prefer mornings, avoid meetings on Fridays, 90-min deep work."
                     class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]"></textarea>
                 </div>
+                <div class="calendar-connection">
+                  <div class="flex items-center gap-3">
+                    <span class="google-mark" aria-hidden="true">
+                      <svg viewBox="0 0 48 48" class="w-6 h-6">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.9-6.9C35.9 1.87 30.47 0 24 0 14.62 0 6.41 5.38 2.56 13.22l8.07 6.26C12.6 13.33 17.85 9.5 24 9.5z"/>
+                        <path fill="#4285F4" d="M46.13 24.5c0-1.64-.15-3.21-.43-4.74H24v9h12.45c-.55 2.98-2.18 5.5-4.66 7.18l7.1 5.52C43.93 37.1 46.13 31.28 46.13 24.5z"/>
+                        <path fill="#FBBC05" d="M10.63 28.03A14.47 14.47 0 0 1 9.5 24c0-1.39.23-2.74.63-4.03l-8.07-6.26A23.88 23.88 0 0 0 0 24c0 3.85.92 7.48 2.56 10.72l8.07-6.69z"/>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.84l-7.1-5.52c-2.01 1.36-4.6 2.16-8.8 2.16-6.16 0-11.37-3.92-13.44-9.51l-8.1 6.72C6.41 42.62 14.62 48 24 48z"/>
+                        <path fill="none" d="M0 0h48v48H0z"/>
+                      </svg>
+                    </span>
+                    <div>
+                      <p class="text-xs uppercase tracking-[0.08em] text-[var(--muted)] mb-1">Google Calendar</p>
+                      <p id="calendar-status" class="text-sm font-semibold text-[var(--text)]">Not connected</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button id="btn-connect-calendar" class="pill bg-[var(--accent)]/10 text-[var(--accent-strong)] px-3 py-2 text-sm font-semibold hover:bg-[var(--accent)]/16">Connect</button>
+                    <button id="btn-disconnect-calendar" class="pill bg-white text-[var(--muted)] border border-[var(--panel-border)] px-3 py-2 text-sm font-semibold hover:text-[var(--text)] hidden">Disconnect</button>
+                  </div>
+                </div>
                 <div class="flex items-center gap-3">
                   <button type="submit" class="px-4 py-2 btn-accent pill text-sm font-medium">
                     Save profile
@@ -139,12 +160,18 @@ const API = 'http://localhost:8000';
       calendarConnected = !!connected;
       const status = document.getElementById('calendar-status');
       const btn = document.getElementById('btn-connect-calendar');
+      const btnDisconnect = document.getElementById('btn-disconnect-calendar');
+      if (!status || !btn) return;
       if (calendarConnected) {
-        status.textContent = 'Google Calendar connected';
+        status.textContent = 'Connected';
+        status.style.color = 'var(--accent-strong)';
         btn.classList.add('hidden');
+        if (btnDisconnect) btnDisconnect.classList.remove('hidden');
       } else {
-        status.textContent = 'Google Calendar not connected';
+        status.textContent = 'Not connected';
+        status.style.color = 'var(--text)';
         btn.classList.remove('hidden');
+        if (btnDisconnect) btnDisconnect.classList.add('hidden');
         calendarCache.clear();
       }
     }
@@ -826,6 +853,19 @@ const API = 'http://localhost:8000';
       });
     }
 
+    async function disconnectCalendar() {
+      try {
+        await api('/api/auth/google/disconnect', { method: 'POST' });
+        setCalendarConnected(false);
+        calendarEvents = [];
+        calendarBusy = [];
+        calendarFree = [];
+        renderSchedule();
+      } catch (e) {
+        alert(e.message || 'Failed to disconnect calendar');
+      }
+    }
+
     async function suggestSlots(taskId) {
       const start = new Date();
       start.setHours(0,0,0,0);
@@ -895,12 +935,22 @@ const API = 'http://localhost:8000';
       await loadSchedule();
     }
 
-    document.getElementById('btn-connect-calendar').onclick = (e) => {
-      e.preventDefault();
-      const token = getToken();
-      if (!token) { alert('Sign in first.'); return; }
-      window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
-    };
+    const connectBtn = document.getElementById('btn-connect-calendar');
+    if (connectBtn) {
+      connectBtn.onclick = (e) => {
+        e.preventDefault();
+        const token = getToken();
+        if (!token) { alert('Sign in first.'); return; }
+        window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
+      };
+    }
+    const disconnectBtn = document.getElementById('btn-disconnect-calendar');
+    if (disconnectBtn) {
+      disconnectBtn.onclick = async (e) => {
+        e.preventDefault();
+        await disconnectCalendar();
+      };
+    }
 
     const prevWeekBtn = document.getElementById('calendar-prev');
     if (prevWeekBtn) {

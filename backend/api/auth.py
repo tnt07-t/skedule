@@ -88,3 +88,14 @@ async def google_calendar_callback(
     except Exception:
         logger.exception("Google OAuth callback failed")
         return RedirectResponse(url=f"{settings.app_url}?calendar_error=1")
+
+
+@router.post("/google/disconnect")
+def google_calendar_disconnect(
+    user_id: str = Depends(get_current_user_id),
+    supabase=Depends(get_supabase),
+):
+    """Remove stored Google Calendar tokens for the user."""
+    supabase.table("calendar_tokens").delete().eq("user_id", user_id).execute()
+    supabase.table("calendar_week_cache").delete().eq("user_id", user_id).execute()
+    return {"ok": True, "disconnected": True}
