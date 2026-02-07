@@ -9,6 +9,7 @@ const API = 'http://localhost:8000';
     let calendarConnected = false;
     let calendarEvents = [];
     let calendarBusy = [];
+    let calendarFree = [];
     let suggestionsCache = [];
     let viewMode = 'week'; // default and only mode now
     let viewAnchor = new Date();
@@ -457,29 +458,24 @@ const API = 'http://localhost:8000';
       if (!getToken()) {
         calendarEvents = [];
         calendarBusy = [];
+        calendarFree = [];
         renderSchedule();
         setCalendarLoading(false);
         return;
       }
       try {
-        const res = await api(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`);
+        const res = await api(`/api/calendar/week?start=${start.toISOString()}&end=${end.toISOString()}`);
         calendarEvents = Array.isArray(res) ? res : (res.events || []);
+        calendarBusy = res.busy || [];
+        calendarFree = res.free || [];
         setCalendarConnected(true);
       } catch (e) {
         calendarEvents = [];
+        calendarBusy = [];
+        calendarFree = [];
         if (e.status === 400 || e.status === 401 || /not connected/i.test(e.message || '')) {
           setCalendarConnected(false);
         }
-      }
-      if (calendarConnected) {
-        try {
-          const busy = await api(`/api/calendar/free-busy?start=${start.toISOString()}&end=${end.toISOString()}`);
-          calendarBusy = busy.busy || [];
-        } catch (e) {
-          calendarBusy = [];
-        }
-      } else {
-        calendarBusy = [];
       }
       renderSchedule();
       setCalendarLoading(false);
@@ -506,7 +502,6 @@ const API = 'http://localhost:8000';
       );
       document.querySelector('[name="profile_preferences"]').value = prefsText;
       setCalendarConnected(profile.calendar_connected);
-      loadSchedule();
     }
 
     // profile form handler is set in setupProfileForm when the menu is rendered
@@ -533,9 +528,6 @@ const API = 'http://localhost:8000';
       session = s;
       if (session) showMain(); else showLogin();
       renderAuth();
-      if (session) {
-        loadSchedule();
-      }
       sb.auth.onAuthStateChange((e, s) => {
         session = s;
         if (session) {
@@ -548,6 +540,8 @@ const API = 'http://localhost:8000';
           showLogin();
           setCalendarConnected(false);
           calendarEvents = [];
+          calendarBusy = [];
+          calendarFree = [];
           suggestionsCache = [];
           renderSchedule();
         }
