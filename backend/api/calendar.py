@@ -32,12 +32,33 @@ def _calendar_items(service, min_access_role: str) -> list[dict]:
 
 def _calendar_ids_for_events(service) -> list[str]:
     """Return calendar ids we can list events from."""
-    return ["primary"]
+    items = _calendar_items(service, min_access_role="reader")
+    ids: list[str] = []
+    for cal in items:
+        cid = cal.get("id")
+        access_role = cal.get("accessRole")
+        if not cid:
+            continue
+        if access_role == "freeBusyReader":
+            continue
+        if cid not in ids:
+            ids.append(cid)
+    if "primary" not in ids:
+        ids.insert(0, "primary")
+    return ids
 
 
 def _calendar_ids_for_busy(service) -> list[str]:
     """Return calendar ids we can use for free/busy."""
-    return ["primary"]
+    items = _calendar_items(service, min_access_role="freeBusyReader")
+    ids: list[str] = []
+    for cal in items:
+        cid = cal.get("id")
+        if cid and cid not in ids:
+            ids.append(cid)
+    if "primary" not in ids:
+        ids.insert(0, "primary")
+    return ids
 
 
 def _fetch_busy(service, start_dt: datetime, end_dt: datetime, cal_ids: list[str]) -> list[dict]:
@@ -261,9 +282,10 @@ def week_summary(
         pass
 
     service = get_calendar_service(user_id, supabase)
-    cal_ids = _calendar_ids_for_events(service)
-    events = _list_events(service, start_dt, end_dt, cal_ids)
-    busy = _fetch_busy(service, start_dt, end_dt, cal_ids)
+    cal_ids_events = _calendar_ids_for_events(service)
+    cal_ids_busy = _calendar_ids_for_busy(service)
+    events = _list_events(service, start_dt, end_dt, cal_ids_events)
+    busy = _fetch_busy(service, start_dt, end_dt, cal_ids_busy)
     free = _free_from_busy(busy, start_dt, end_dt)
     payload = {"events": events, "busy": busy, "free": free}
     try:
