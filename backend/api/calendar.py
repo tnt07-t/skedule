@@ -229,10 +229,6 @@ def week_summary(
     supabase=Depends(get_supabase),
 ):
     """Return events, busy, and free blocks for a week."""
-<<<<<<< HEAD
-    service = get_calendar_service(user_id, supabase)
-    start_dt, end_dt = clamp_range(start, end, max_days=7)
-=======
     start_dt, end_dt = clamp_range(start, end, max_days=7)
     cache_start = start_dt.isoformat()
     cache_end = end_dt.isoformat()
@@ -265,14 +261,10 @@ def week_summary(
         pass
 
     service = get_calendar_service(user_id, supabase)
->>>>>>> tran-cache
     cal_ids = _calendar_ids_for_events(service)
     events = _list_events(service, start_dt, end_dt, cal_ids)
     busy = _fetch_busy(service, start_dt, end_dt, cal_ids)
     free = _free_from_busy(busy, start_dt, end_dt)
-<<<<<<< HEAD
-    return {"events": events, "busy": busy, "free": free}
-=======
     payload = {"events": events, "busy": busy, "free": free}
     try:
         supabase.table("calendar_week_cache").upsert(
@@ -289,7 +281,6 @@ def week_summary(
     except Exception:
         pass
     return payload
->>>>>>> tran-cache
 
 
 @router.post("/events")
