@@ -189,6 +189,79 @@ section h2 { letter-spacing: -0.01em; }
   font-size: 11px;
 }
 
+/* --- Form styling --- */
+.form-shell {
+  border-radius: 24px;
+}
+.panel-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.eyebrow-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--tag);
+  color: #c05621;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 10px;
+  border: 1px solid rgba(249, 115, 22, 0.22);
+}
+.soft-pill {
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
+.field { display: grid; gap: 6px; }
+.field-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.field-input {
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: #fff;
+  color: var(--text);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+.field-input:focus {
+  outline: none;
+  border-color: rgba(249, 115, 22, 0.4);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+}
+.hint-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px dashed var(--panel-border);
+  border-radius: 12px;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.dot-orange { background: var(--accent); }
+
 /* --- Profile calendar connect --- */
 .calendar-connection {
   display: flex;
