@@ -1,6 +1,6 @@
 :root {
-  --accent: #f59e0b; /* amber 500 */
-  --accent-strong: #fbbf24; /* amber 400 */
+  --accent: #f97012; /* vivid orange from sample */
+  --accent-strong: #ff8900; /* slightly brighter for hover */
   --panel: #ffffff;
   --panel-border: #e5e7eb;
   --text: #111827;
@@ -8,9 +8,13 @@
   --bg: #ffffff;
 }
 body {
-  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
+}
+h1, h2, h3, .heading, .card h2, .btn-accent, .pill, button {
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  letter-spacing: -0.01em;
 }
 button {
   transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, opacity 140ms ease;
@@ -57,28 +61,34 @@ button:active { transform: scale(0.97); }
     }
 .calendar-grid {
   position: relative;
-  height: 768px;
+  height: calc(var(--hour-height) * 12); /* show ~12 hours at a time */
   border-radius: 14px;
-  overflow: hidden;
+  overflow-y: auto;
   border: 1px solid var(--panel-border);
   background: #f9fafb;
   padding: 0 6px 6px;
+  scroll-behavior: smooth;
+}
+
+#calendar-week {
+  position: relative;
+  overflow: hidden;
 }
 .loading-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(0,0,0,0.35);
-  backdrop-filter: blur(4px);
-  z-index: 999;
+  background: rgba(255,255,255,0.35);
+  backdrop-filter: blur(1px);
+  z-index: 20;
 }
 .spinner {
   width: 42px;
   height: 42px;
   border-radius: 50%;
   border: 4px solid rgba(255,255,255,0.25);
-  border-top-color: #fff;
+  border-top-color: #111827;
   animation: spin 0.9s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -93,6 +103,12 @@ button:active { transform: scale(0.97); }
   flex-direction: column;
   background: #f3f4f6;
   border-right: 1px solid #e5e7eb;
+}
+.time-all-day {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
 }
 .calendar-time-col .time {
   height: var(--hour-height);
@@ -110,6 +126,32 @@ button:active { transform: scale(0.97); }
     transparent 1px,
     transparent var(--hour-height)
   );
+}
+.all-day-row {
+  height: 28px;
+  margin: 4px 8px 2px;
+  position: relative;
+}
+.all-day-chip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  z-index: 4;
 }
 .calendar-block {
   position: absolute;

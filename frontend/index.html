@@ -7,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect fill='%23ea580c' width='32' height='32' rx='4'/><text x='16' y='22' font-size='18' font-family='sans-serif' fill='white' text-anchor='middle'>S</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="./styles.css" />
@@ -17,7 +17,7 @@
     <!-- Header -->
     <header class="flex justify-between items-center mb-3 pb-2 border-b border-white/10 relative">
       <div>
-        <p class="text-sm text-gray-500 tracking-wide uppercase">Plan your focus</p>
+        <p class="text-sm text-gray-500 tracking-wide uppercase">Bridging your tasks in your schedule.</p>
         <h1 class="text-3xl font-semibold text-black">Skedule</h1>
       </div>
       <div id="auth-area" class="text-black relative"></div>
@@ -87,34 +87,37 @@
         </form>
       </section>
 
-      <!-- Calendar -->
-      <section class="mb-2">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-semibold text-black">Calendar</h2>
-          <div class="flex flex-wrap items-center gap-2">
-            <button id="calendar-prev" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Prev</button>
-            <button id="calendar-today" class="pill bg-[var(--accent)]/10 px-3 py-1 text-xs text-[var(--accent-strong)] hover:bg-[var(--accent)]/20">Today</button>
-            <button id="calendar-next" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Next</button>
-            <span id="calendar-range" class="text-xs text-[var(--muted)]"></span>
+      <!-- Tasks + Calendar side-by-side -->
+      <section class="mb-4 grid gap-3 md:grid-cols-[1.5fr_0.6fr] items-stretch">
+        <!-- Calendar -->
+        <div class="space-y-3 h-full">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-black">Calendar</h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="calendar-prev" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Prev</button>
+              <button id="calendar-today" class="pill bg-[var(--accent)]/10 px-3 py-1 text-xs text-[var(--accent-strong)] hover:bg-[var(--accent)]/20">Today</button>
+              <button id="calendar-next" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Next</button>
+              <span id="calendar-range" class="text-xs text-[var(--muted)]"></span>
+            </div>
+          </div>
+          <div id="calendar-week" class="p-5 card min-h-[220px]">
+            <div id="calendar-days-header" class="calendar-days-header"></div>
+            <div id="calendar-grid" class="calendar-grid"></div>
+            <p id="calendar-empty" class="text-slate-500 text-sm mt-3 hidden"></p>
+            <div id="calendar-loading" class="loading-overlay hidden">
+              <div class="spinner"></div>
+            </div>
           </div>
         </div>
-        <div id="calendar-week" class="p-5 card min-h-[220px]">
-          <div id="calendar-days-header" class="calendar-days-header"></div>
-          <div id="calendar-grid" class="calendar-grid"></div>
-          <p id="calendar-empty" class="text-slate-500 text-sm mt-3 hidden"></p>
-          <div id="calendar-loading" class="loading-overlay hidden">
-            <div class="spinner"></div>
-          </div>
-        </div>
-      </section>
 
-      <!-- Tasks + suggestions -->
-      <section class="mb-4 p-5 card space-y-4">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
-          <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
+        <!-- Tasks + suggestions -->
+        <div class="p-5 card space-y-4 h-full">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
+            <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
+          </div>
+          <div id="tasks-list" class="space-y-2"></div>
         </div>
-        <div id="tasks-list" class="space-y-2"></div>
       </section>
     </div>
   </div>

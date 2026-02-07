@@ -15,10 +15,12 @@ const API = 'http://localhost:8000';
     let suggestionsCache = [];
     let viewMode = 'week'; // default and only mode now
     let viewAnchor = new Date();
+    let calendarAutoCentered = false;
 
     const CAL_START_HOUR = 0;
     const CAL_END_HOUR = 24;
     const HOUR_HEIGHT = 64;
+    const VISIBLE_HOURS = 12;
 
     function getToken() {
       return session?.access_token || '';
@@ -181,6 +183,7 @@ const API = 'http://localhost:8000';
     function setViewMode(mode) {
       viewMode = 'week';
       viewAnchor = new Date();
+      calendarAutoCentered = false;
       renderSchedule();
       loadSchedule();
     }
@@ -190,12 +193,14 @@ const API = 'http://localhost:8000';
       const step = viewMode === 'day' ? 1 : 7;
       d.setDate(d.getDate() + (step * delta));
       viewAnchor = d;
+      calendarAutoCentered = false;
       renderSchedule();
       loadSchedule();
     }
 
     function goToToday() {
       viewAnchor = new Date();
+      calendarAutoCentered = false;
       renderSchedule();
       loadSchedule();
     }
@@ -247,7 +252,7 @@ const API = 'http://localhost:8000';
       grid.classList.remove('calendar-month');
       grid.classList.add('calendar-grid');
       grid.style.setProperty('--hour-height', `${HOUR_HEIGHT}px`);
-      grid.style.height = `${(CAL_END_HOUR - CAL_START_HOUR) * HOUR_HEIGHT}px`;
+      grid.style.height = `${VISIBLE_HOURS * HOUR_HEIGHT}px`; // show ~12 hours at once
       grid.innerHTML = '';
 
       const inner = document.createElement('div');
@@ -255,6 +260,10 @@ const API = 'http://localhost:8000';
 
       const timeCol = document.createElement('div');
       timeCol.className = 'calendar-time-col';
+      const allDayLabel = document.createElement('div');
+      allDayLabel.className = 'time time-all-day';
+      allDayLabel.textContent = 'All Day';
+      timeCol.appendChild(allDayLabel);
       for (let h = CAL_START_HOUR; h < CAL_END_HOUR; h++) {
         const label = new Date(2000, 0, 1, h, 0, 0).toLocaleTimeString([], { hour: 'numeric' });
         const t = document.createElement('div');
@@ -271,6 +280,10 @@ const API = 'http://localhost:8000';
         const key = dayKey(day);
         const col = document.createElement('div');
         col.className = 'calendar-day-col';
+        const allDayRow = document.createElement('div');
+        allDayRow.className = 'all-day-row';
+        col.appendChild(allDayRow);
+        col.style.paddingTop = '36px'; // base space for all-day row
         col.dataset.day = key;
         inner.appendChild(col);
         dayCols[key] = col;
@@ -320,6 +333,24 @@ const API = 'http://localhost:8000';
       }
       col.appendChild(block);
       return block;
+    }
+
+    function placeAllDayChip(dayCols, day, label, idx = 0) {
+      const key = dayKey(day);
+      const col = dayCols[key];
+      if (!col) return;
+      const row = col.querySelector('.all-day-row');
+      const chip = document.createElement('div');
+      chip.className = 'all-day-chip';
+      chip.textContent = label || 'All day';
+      chip.title = label || 'All day';
+      if (row) {
+        row.appendChild(chip);
+        const needed = row.offsetHeight + 12; // chips height plus gap
+        col.style.paddingTop = `${needed}px`;
+      } else {
+        col.appendChild(chip);
+      }
     }
 
     function parseAllDayDate(dateStr) {
@@ -458,6 +489,7 @@ const API = 'http://localhost:8000';
         placeBlock(dayCols, s, e, 'busy', 'Busy', { html: '', title: 'Busy' });
       });
 
+      const allDayStack = {};
       (calendarEvents || []).forEach(ev => {
         const summary = ev.summary || 'Busy';
         const allDay = !!ev.all_day;
@@ -467,11 +499,20 @@ const API = 'http://localhost:8000';
           e = new Date(s);
           e.setDate(e.getDate() + 1);
         }
-        forEachDaySegment(s, e, (segStart, segEnd) => {
-          placeBlock(dayCols, segStart, segEnd, 'event', summary, {
-            html: `<div class="block-title">${escapeHtml(summary)}</div>`,
+        if (allDay) {
+          forEachDaySegment(s, e, (segStart) => {
+            const key = dayKey(segStart);
+            const idx = allDayStack[key] || 0;
+            placeAllDayChip(dayCols, segStart, summary, idx);
+            allDayStack[key] = idx + 1;
           });
-        });
+        } else {
+          forEachDaySegment(s, e, (segStart, segEnd) => {
+            placeBlock(dayCols, segStart, segEnd, 'event', summary, {
+              html: `<div class="block-title">${escapeHtml(summary)}</div>`,
+            });
+          });
+        }
       });
 
       const suggestionItems = Array.isArray(suggestionsCache?.items)
@@ -504,6 +545,19 @@ const API = 'http://localhost:8000';
           reject(btn.dataset.id);
         };
       });
+
+      // center initial scroll to ~7 AM so daytime is visible, but still scrollable to midnight
+      if (!calendarAutoCentered) {
+        centerCalendarTo(7);
+        calendarAutoCentered = true;
+      }
+    }
+
+    function centerCalendarTo(hour = 6) {
+      const grid = document.getElementById('calendar-grid');
+      if (!grid) return;
+      const target = Math.max(0, (hour - CAL_START_HOUR) * HOUR_HEIGHT);
+      grid.scrollTop = target;
     }
 
     function getWeekCacheKey(start, end) {
@@ -708,7 +762,7 @@ const API = 'http://localhost:8000';
                 <span class="text-[var(--muted)] text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
               </div>
               <div class="flex gap-2">
-                <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest slots</button>
+                <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest</button>
                 <button data-task-id="${t.id}" class="delete-task px-3 py-1.5 text-sm pill bg-[var(--panel-border)] text-[var(--text)]">Delete</button>
               </div>
             </div>
@@ -893,6 +947,13 @@ const API = 'http://localhost:8000';
       document.getElementById('calendar-status').textContent = 'Calendar connection failed';
       renderSchedule();
       history.replaceState({}, '', location.pathname);
+    }
+
+    const gridEl = document.getElementById('calendar-grid');
+    if (gridEl) {
+      gridEl.addEventListener('scroll', () => {
+        calendarAutoCentered = true; // once user scrolls, don't snap back
+      });
     }
 
     loadConfig()
