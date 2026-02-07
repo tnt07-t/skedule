@@ -537,6 +537,8 @@ const API = 'http://localhost:8000';
       if (!getToken()) {
         calendarEvents = [];
         calendarBusy = [];
+        calendarFree = [];
+        calendarCache.clear();
         renderSchedule();
         setCalendarLoading(false);
         return;
@@ -544,6 +546,14 @@ const API = 'http://localhost:8000';
       try {
         const res = await api(`/api/calendar/week?start=${start.toISOString()}&end=${end.toISOString()}`);
         calendarEvents = Array.isArray(res) ? res : (res.events || []);
+        calendarBusy = res.busy || [];
+        calendarFree = res.free || [];
+        calendarCache.set(getWeekCacheKey(start, end), {
+          events: calendarEvents,
+          busy: calendarBusy,
+          free: calendarFree,
+          fetchedAt: Date.now(),
+        });
         setCalendarConnected(true);
       } catch (e) {
         calendarEvents = [];
@@ -837,6 +847,28 @@ const API = 'http://localhost:8000';
       if (!token) { alert('Sign in first.'); return; }
       window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
     };
+
+    const prevWeekBtn = document.getElementById('calendar-prev');
+    if (prevWeekBtn) {
+      prevWeekBtn.onclick = (e) => {
+        e.preventDefault();
+        shiftWeek(-1);
+      };
+    }
+    const nextWeekBtn = document.getElementById('calendar-next');
+    if (nextWeekBtn) {
+      nextWeekBtn.onclick = (e) => {
+        e.preventDefault();
+        shiftWeek(1);
+      };
+    }
+    const todayBtn = document.getElementById('calendar-today');
+    if (todayBtn) {
+      todayBtn.onclick = (e) => {
+        e.preventDefault();
+        goToToday();
+      };
+    }
 
     const rejectAllBtn = document.getElementById('btn-reject-all');
     if (rejectAllBtn) {
