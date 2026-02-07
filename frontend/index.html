@@ -91,7 +91,12 @@
       <section class="mb-2">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-semibold text-black">Calendar</h2>
-          <div class="flex flex-wrap items-center gap-3"></div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="calendar-prev" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Prev</button>
+            <button id="calendar-today" class="pill bg-[var(--accent)]/10 px-3 py-1 text-xs text-[var(--accent-strong)] hover:bg-[var(--accent)]/20">Today</button>
+            <button id="calendar-next" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Next</button>
+            <span id="calendar-range" class="text-xs text-[var(--muted)]"></span>
+          </div>
         </div>
         <div id="calendar-week" class="p-5 card min-h-[220px]">
           <div id="calendar-days-header" class="calendar-days-header"></div>
