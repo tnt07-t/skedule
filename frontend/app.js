@@ -350,7 +350,8 @@ const API = 'http://localhost:8000';
         });
       });
 
-      const pending = (suggestionsCache || []).filter(s => s.status === 'pending');
+      const suggestionItems = Array.isArray(suggestionsCache?.items) ? suggestionsCache.items : (Array.isArray(suggestionsCache) ? suggestionsCache : []);
+      const pending = suggestionItems.filter(s => s.status === 'pending');
       pending.forEach(s => {
         const st = new Date(s.start_time);
         const key = dayKey(st);
@@ -422,7 +423,10 @@ const API = 'http://localhost:8000';
         });
       });
 
-      const pending = (suggestionsCache || []).filter(s => s.status === 'pending');
+      const suggestionItems = Array.isArray(suggestionsCache?.items)
+        ? suggestionsCache.items
+        : (Array.isArray(suggestionsCache) ? suggestionsCache : []);
+      const pending = suggestionItems.filter(s => s.status === 'pending');
       pending.forEach(s => {
         const st = new Date(s.start_time);
         const et = new Date(s.end_time);
@@ -579,18 +583,64 @@ const API = 'http://localhost:8000';
       if (!getToken()) return;
       const tasks = await api('/api/tasks');
       const el = document.getElementById('tasks-list');
-      el.innerHTML = tasks.map(t => `
-        <div class="p-3 card flex justify-between items-center pop-in" data-task-id="${t.id}">
-          <div>
-            <span class="font-medium text-[var(--text)]">${escapeHtml(t.name)}</span>
-            <span class="text-[var(--muted)] text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
+      const suggestionItems = Array.isArray(suggestionsCache?.items)
+        ? suggestionsCache.items
+        : (Array.isArray(suggestionsCache) ? suggestionsCache : []);
+      const pendingByTask = suggestionItems
+        .filter(s => s.status === 'pending')
+        .reduce((acc, s) => {
+          (acc[s.task_id] ||= []).push(s);
+          return acc;
+        }, {});
+
+      el.innerHTML = tasks.map(t => {
+        const suggs = pendingByTask[t.id] || [];
+        const sugHtml = suggs.length
+          ? `
+              <button class="toggle-suggest text-xs text-[var(--muted)] flex items-center gap-1" data-task-id="${t.id}">
+                <span>Suggestions (${suggs.length})</span>
+                <span class="caret">▼</span>
+              </button>
+              <div class="suggest-list space-y-2 mt-1" data-list-for="${t.id}">
+                <div class="flex justify-between items-center">
+                  <span class="text-xs text-[var(--muted)]">Pending</span>
+                  <button class="reject-all-task text-xs px-2 py-1 pill bg-white/60 text-black hover:bg-white" data-task-id="${t.id}">Reject all</button>
+                </div>
+                ${suggs.map(s => {
+                  const start = new Date(s.start_time);
+                  const end = new Date(s.end_time);
+                  const label = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                  return `
+                    <div class="p-2 border border-[var(--panel-border)] rounded-lg flex items-center justify-between" data-suggestion-id="${s.id}" data-suggestion-task="${t.id}">
+                      <span class="text-xs text-[var(--text)]">${label}</span>
+                      <span class="flex gap-1">
+                        <button class="approve px-2 py-1 text-xs btn-accent pill" data-id="${s.id}">Add</button>
+                        <button class="reject px-2 py-1 text-xs pill bg-[var(--panel-border)] text-[var(--text)]" data-id="${s.id}">Reject</button>
+                      </span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `
+          : '<p class="text-[var(--muted)] text-xs">No suggestions yet.</p>';
+
+        return `
+          <div class="p-3 card space-y-2 pop-in" data-task-id="${t.id}">
+            <div class="flex justify-between items-center">
+              <div>
+                <span class="font-medium text-[var(--text)]">${escapeHtml(t.name)}</span>
+                <span class="text-[var(--muted)] text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
+              </div>
+              <div class="flex gap-2">
+                <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest slots</button>
+                <button data-task-id="${t.id}" class="delete-task px-3 py-1.5 text-sm pill bg-[var(--panel-border)] text-[var(--text)]">Delete</button>
+              </div>
+            </div>
+            <div class="space-y-2">${sugHtml}</div>
           </div>
-          <div class="flex gap-2">
-            <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest slots</button>
-            <button data-task-id="${t.id}" class="delete-task px-3 py-1.5 text-sm pill bg-[var(--panel-border)] text-[var(--text)]">Delete</button>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
+
       el.querySelectorAll('.suggest-slots').forEach(btn => {
         btn.onclick = () => suggestSlots(btn.dataset.taskId);
       });
@@ -598,6 +648,23 @@ const API = 'http://localhost:8000';
         btn.onclick = () => {
           const card = btn.closest('[data-task-id]');
           deleteTask(btn.dataset.taskId, card);
+        };
+      });
+      el.querySelectorAll('.approve').forEach(btn => {
+        btn.onclick = () => approve(btn.dataset.id);
+      });
+      el.querySelectorAll('.reject').forEach(btn => {
+        btn.onclick = () => reject(btn.dataset.id);
+      });
+      el.querySelectorAll('.reject-all-task').forEach(btn => {
+        btn.onclick = () => rejectAll(btn.dataset.taskId);
+      });
+      el.querySelectorAll('.toggle-suggest').forEach(btn => {
+        btn.onclick = () => {
+          const list = document.querySelector(`[data-list-for=\"${btn.dataset.taskId}\"]`);
+          if (list) list.classList.toggle('hidden');
+          const caret = btn.querySelector('.caret');
+          if (caret) caret.textContent = caret.textContent === '▼' ? '▲' : '▼';
         };
       });
     }
@@ -623,14 +690,10 @@ const API = 'http://localhost:8000';
 
     function setSuggesting(flag) {
       suggesting = flag;
-      const loader = document.getElementById('suggestions-loading');
-      if (loader) loader.classList.toggle('hidden', !flag);
       document.querySelectorAll('.suggest-slots').forEach(btn => {
         btn.disabled = flag;
         btn.classList.toggle('opacity-50', flag);
       });
-      const rejectAllBtn = document.getElementById('btn-reject-all');
-      if (rejectAllBtn) rejectAllBtn.disabled = flag;
     }
 
     async function suggestSlots(taskId) {
@@ -652,46 +715,20 @@ const API = 'http://localhost:8000';
 
     async function loadSuggestions() {
       const list = await api('/api/suggestions');
-      suggestionsCache = list;
-      const pending = list.filter(s => s.status === 'pending');
-      const el = document.getElementById('suggestions-list');
-      const empty = document.getElementById('suggestions-empty');
-      const rejectAllBtn = document.getElementById('btn-reject-all');
-      if (pending.length === 0) {
-        el.innerHTML = '';
-        empty.classList.remove('hidden');
-        if (rejectAllBtn) {
-          rejectAllBtn.disabled = true;
-          rejectAllBtn.classList.add('opacity-40', 'cursor-not-allowed');
+      const items = Array.isArray(list?.items) ? list.items : (Array.isArray(list) ? list : []);
+      suggestionsCache = items;
+      const rationale = list?.rationale || '';
+      const box = document.getElementById('llm-rationale');
+      if (box) {
+        if (rationale) {
+          box.textContent = rationale;
+          box.classList.remove('hidden');
+        } else {
+          box.classList.add('hidden');
+          box.textContent = '';
         }
-        renderSchedule();
-        return;
       }
-      if (rejectAllBtn) {
-        rejectAllBtn.disabled = suggesting;
-        rejectAllBtn.classList.remove('opacity-40', 'cursor-not-allowed');
-      }
-        empty.classList.add('hidden');
-        el.innerHTML = pending.map(s => {
-          const start = new Date(s.start_time);
-          const end = new Date(s.end_time);
-          const label = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-          return `
-          <div class="p-3 card flex justify-between items-center gap-2 pop-in" data-id="${s.id}">
-            <span class="text-xs truncate text-[var(--text)]">${label}</span>
-            <span class="flex gap-1">
-              <button class="approve px-2 py-1 text-xs btn-accent pill">Add</button>
-              <button class="reject px-2 py-1 text-xs pill bg-[var(--panel-border)] text-[var(--text)]">Reject</button>
-            </span>
-          </div>
-        `;
-        }).join('');
-      el.querySelectorAll('.approve').forEach(btn => {
-        btn.onclick = () => approve(btn.closest('[data-id]').dataset.id, btn.closest('[data-id]'));
-      });
-      el.querySelectorAll('.reject').forEach(btn => {
-        btn.onclick = () => reject(btn.closest('[data-id]').dataset.id, btn.closest('[data-id]'));
-      });
+      await loadTasks();
       renderSchedule();
     }
 
@@ -718,9 +755,12 @@ const API = 'http://localhost:8000';
       await loadSchedule();
     }
 
-    async function rejectAll() {
-      document.querySelectorAll('#suggestions-list [data-id]').forEach(el => el.classList.add('shrink-out'));
-      await api('/api/suggestions/reject-all', { method: 'POST' });
+    async function rejectAll(taskId = null) {
+      if (taskId) {
+        document.querySelectorAll(`[data-suggestion-task="${taskId}"]`).forEach(el => el.classList.add('shrink-out'));
+      }
+      const url = taskId ? `/api/suggestions/reject-all?task_id=${taskId}` : '/api/suggestions/reject-all';
+      await api(url, { method: 'POST' });
       await loadSuggestions();
       await loadSchedule();
     }
@@ -731,14 +771,6 @@ const API = 'http://localhost:8000';
       if (!token) { alert('Sign in first.'); return; }
       window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
     };
-
-    const rejectAllBtn = document.getElementById('btn-reject-all');
-    if (rejectAllBtn) {
-      rejectAllBtn.onclick = (e) => {
-        e.preventDefault();
-        rejectAll();
-      };
-    }
 
     updateViewButtons();
     renderSchedule();
