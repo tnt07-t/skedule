@@ -97,5 +97,9 @@ def google_calendar_disconnect(
 ):
     """Remove stored Google Calendar tokens for the user."""
     supabase.table("calendar_tokens").delete().eq("user_id", user_id).execute()
-    supabase.table("calendar_week_cache").delete().eq("user_id", user_id).execute()
+    try:
+        supabase.table("calendar_week_cache").delete().eq("user_id", user_id).execute()
+    except Exception:
+        # Cache table may not exist; ignore so disconnect still succeeds
+        pass
     return {"ok": True, "disconnected": True}

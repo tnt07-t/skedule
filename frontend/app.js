@@ -104,14 +104,14 @@ const API = 'http://localhost:8000';
                         <path fill="none" d="M0 0h48v48H0z"/>
                       </svg>
                     </span>
-                    <div>
-                      <p class="text-xs uppercase tracking-[0.08em] text-[var(--muted)] mb-1">Google Calendar</p>
-                      <p id="calendar-status" class="text-sm font-semibold text-[var(--text)]">Not connected</p>
-                    </div>
+                  <div>
+                    <p class="text-xs uppercase tracking-[0.08em] text-[var(--muted)] mb-1">Google Calendar</p>
+                    <p id="calendar-status" class="text-sm font-semibold text-[var(--text)]">Not connected</p>
+                  </div>
                   </div>
                   <div class="flex items-center gap-2">
-                    <button id="btn-connect-calendar" class="pill bg-[var(--accent)]/10 text-[var(--accent-strong)] px-3 py-2 text-sm font-semibold hover:bg-[var(--accent)]/16">Connect</button>
-                    <button id="btn-disconnect-calendar" class="pill bg-white text-[var(--muted)] border border-[var(--panel-border)] px-3 py-2 text-sm font-semibold hover:text-[var(--text)] hidden">Disconnect</button>
+                    <button type="button" id="btn-connect-calendar" class="pill bg-[var(--accent)]/10 text-[var(--accent-strong)] px-3 py-2 text-sm font-semibold hover:bg-[var(--accent)]/16">Connect</button>
+                    <button type="button" id="btn-disconnect-calendar" class="pill bg-white text-[var(--muted)] border border-[var(--panel-border)] px-3 py-2 text-sm font-semibold hover:text-[var(--text)] hidden">Disconnect</button>
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -141,6 +141,7 @@ const API = 'http://localhost:8000';
         });
         document.getElementById('btn-signout').onclick = () => { sb.auth.signOut(); };
         setupProfileForm();
+        bindCalendarButtons();
       } else {
         el.innerHTML = '';
       }
@@ -855,12 +856,19 @@ const API = 'http://localhost:8000';
 
     async function disconnectCalendar() {
       try {
+        const token = getToken();
+        if (!token) { alert('Sign in first.'); return; }
         await api('/api/auth/google/disconnect', { method: 'POST' });
         setCalendarConnected(false);
         calendarEvents = [];
         calendarBusy = [];
         calendarFree = [];
         renderSchedule();
+        const status = document.getElementById('profile-status');
+        if (status) {
+          status.textContent = 'Disconnected';
+          setTimeout(() => { status.textContent = ''; }, 2000);
+        }
       } catch (e) {
         alert(e.message || 'Failed to disconnect calendar');
       }
@@ -935,21 +943,23 @@ const API = 'http://localhost:8000';
       await loadSchedule();
     }
 
-    const connectBtn = document.getElementById('btn-connect-calendar');
-    if (connectBtn) {
-      connectBtn.onclick = (e) => {
-        e.preventDefault();
-        const token = getToken();
-        if (!token) { alert('Sign in first.'); return; }
-        window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
-      };
-    }
-    const disconnectBtn = document.getElementById('btn-disconnect-calendar');
-    if (disconnectBtn) {
-      disconnectBtn.onclick = async (e) => {
-        e.preventDefault();
-        await disconnectCalendar();
-      };
+    function bindCalendarButtons() {
+      const connectBtn = document.getElementById('btn-connect-calendar');
+      if (connectBtn) {
+        connectBtn.onclick = (e) => {
+          e.preventDefault();
+          const token = getToken();
+          if (!token) { alert('Sign in first.'); return; }
+          window.location.href = `${API}/api/auth/google/connect?access_token=${encodeURIComponent(token)}`;
+        };
+      }
+      const disconnectBtn = document.getElementById('btn-disconnect-calendar');
+      if (disconnectBtn) {
+        disconnectBtn.onclick = async (e) => {
+          e.preventDefault();
+          await disconnectCalendar();
+        };
+      }
     }
 
     const prevWeekBtn = document.getElementById('calendar-prev');
