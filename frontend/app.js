@@ -13,6 +13,11 @@ const API = 'http://localhost:8000';
     const calendarCache = new Map();
     const CAL_CACHE_TTL_MS = 10 * 60 * 1000;
     let suggestionsCache = [];
+    let tasksCache = [];
+    const tasksById = new Map();
+    const LLM_ESTIMATE_TTL_MS = 24 * 60 * 60 * 1000;
+    const LLM_ESTIMATE_KEY = 'skedule_estimate_attempt:';
+    const llmEstimateInFlight = new Set();
     let viewMode = 'week'; // default and only mode now
     let viewAnchor = new Date();
 
@@ -654,12 +659,21 @@ const API = 'http://localhost:8000';
     async function loadTasks() {
       if (!getToken()) return;
       const tasks = await api('/api/tasks');
+      tasksCache = tasks || [];
+      tasksById.clear();
+      tasksCache.forEach(t => { if (t && t.id) tasksById.set(t.id, t); });
       const el = document.getElementById('tasks-list');
       el.innerHTML = tasks.map(t => `
         <div class="p-3 card flex justify-between items-center pop-in" data-task-id="${t.id}">
           <div>
             <span class="font-medium text-[var(--text)]">${escapeHtml(t.name)}</span>
             <span class="text-[var(--muted)] text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
+            <span class="task-complete-badge ${t.is_complete ? '' : 'hidden'}" data-complete-badge="${t.id}">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M5 10.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              Done
+            </span>
           </div>
           <div class="flex gap-2">
             <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest slots</button>
@@ -676,6 +690,10 @@ const API = 'http://localhost:8000';
           deleteTask(btn.dataset.taskId, card);
         };
       });
+      updateTaskCompletionIndicators();
+      if (suggestionsCache && suggestionsCache.length) {
+        renderSuggestionsExplain(suggestionsCache.filter(s => s.status === 'pending'));
+      }
     }
 
     function escapeHtml(s) {
@@ -693,7 +711,7 @@ const API = 'http://localhost:8000';
     function getSuggestCount() {
       const input = document.getElementById('suggest-count');
       const v = Number(String(input?.value || '').replace(/[^0-9]/g, ''));
-      if (Number.isNaN(v) || v <= 0) return 5;
+      if (Number.isNaN(v) || v < 3) return 3;
       return Math.min(20, v);
     }
 
@@ -709,6 +727,37 @@ const API = 'http://localhost:8000';
       if (rejectAllBtn) rejectAllBtn.disabled = flag;
     }
 
+    async function ensureTaskEstimate(taskId, start, end) {
+      const attemptKey = `${LLM_ESTIMATE_KEY}${taskId}`;
+      try {
+        const task = await api(`/api/tasks/${taskId}`);
+        if (task && task.estimated_minutes != null) return;
+        if (llmEstimateInFlight.has(taskId)) return;
+        const lastAttempt = Number(localStorage.getItem(attemptKey) || 0);
+        if (lastAttempt && (Date.now() - lastAttempt) < LLM_ESTIMATE_TTL_MS) return;
+        llmEstimateInFlight.add(taskId);
+        const taskText = [task?.name, task?.description].filter(Boolean).join(' - ') || 'Task';
+        await api('/api/llm', {
+          method: 'POST',
+          body: JSON.stringify({
+            task_id: taskId,
+            task: taskText,
+            start: start.toISOString(),
+            end: end.toISOString(),
+          }),
+        });
+      } catch (e) {
+        // Best effort; suggestions should still work if LLM fails.
+      } finally {
+        llmEstimateInFlight.delete(taskId);
+        try {
+          localStorage.setItem(attemptKey, String(Date.now()));
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
+    }
+
     async function suggestSlots(taskId) {
       const start = new Date();
       start.setHours(0,0,0,0);
@@ -717,6 +766,7 @@ const API = 'http://localhost:8000';
       try {
         setSuggesting(true);
         const limit = getSuggestCount();
+        await ensureTaskEstimate(taskId, start, end);
         await api(`/api/suggestions/suggest/${taskId}?start=${start.toISOString()}&end=${end.toISOString()}&limit=${limit}`, { method: 'POST' });
         loadSuggestions();
       } catch (e) {
@@ -730,9 +780,12 @@ const API = 'http://localhost:8000';
       const list = await api('/api/suggestions');
       suggestionsCache = list;
       const pending = list.filter(s => s.status === 'pending');
+      const rankedPending = rankSuggestions(pending);
       const el = document.getElementById('suggestions-list');
       const empty = document.getElementById('suggestions-empty');
       const rejectAllBtn = document.getElementById('btn-reject-all');
+      renderSuggestionsExplain(pending);
+      updateTaskCompletionIndicators();
       if (pending.length === 0) {
         el.innerHTML = '';
         empty.classList.remove('hidden');
@@ -748,7 +801,7 @@ const API = 'http://localhost:8000';
         rejectAllBtn.classList.remove('opacity-40', 'cursor-not-allowed');
       }
         empty.classList.add('hidden');
-        el.innerHTML = pending.map(s => {
+        el.innerHTML = rankedPending.map(s => {
           const start = new Date(s.start_time);
           const end = new Date(s.end_time);
           const label = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -771,9 +824,124 @@ const API = 'http://localhost:8000';
       renderSchedule();
     }
 
+    function formatHours(minutes) {
+      if (!minutes || minutes <= 0) return '0 hours';
+      const hours = minutes / 60;
+      const rounded = Math.round(hours * 10) / 10;
+      return `${rounded} hours`;
+    }
+
+    function prefCenterMinutes(pref) {
+      if (pref === 'day') return 10.5 * 60;
+      if (pref === 'night') return 20 * 60;
+      return 14.5 * 60;
+    }
+
+    function scoreSuggestion(s, rangeStart) {
+      const st = new Date(s.start_time);
+      const minutesFromStart = (st - rangeStart) / 60000;
+      const timeOfDay = st.getHours() * 60 + st.getMinutes();
+      const pref = tasksById.get(s.task_id)?.time_preference || 'midday';
+      const prefDistance = Math.abs(timeOfDay - prefCenterMinutes(pref));
+      return (-minutesFromStart) - (0.1 * prefDistance);
+    }
+
+    function rankSuggestions(pending) {
+      if (!pending || pending.length === 0) return [];
+      const minStart = pending.reduce((acc, s) => {
+        const t = new Date(s.start_time).getTime();
+        return Math.min(acc, t);
+      }, Infinity);
+      const rangeStart = new Date(minStart);
+      return pending
+        .slice()
+        .sort((a, b) => {
+          const sa = scoreSuggestion(a, rangeStart);
+          const sb = scoreSuggestion(b, rangeStart);
+          if (sb !== sa) return sb - sa;
+          return new Date(a.start_time) - new Date(b.start_time);
+        });
+    }
+
+    function updateTaskCompletionIndicators() {
+      if (!tasksById.size) return;
+      document.querySelectorAll('#tasks-list [data-task-id]').forEach(card => {
+        const id = card.dataset.taskId;
+        const task = tasksById.get(id);
+        const done = !!task?.is_complete;
+        const badge = card.querySelector(`[data-complete-badge="${id}"]`);
+        if (badge) badge.classList.toggle('hidden', !done);
+      });
+    }
+
+    function renderSuggestionsExplain(pending) {
+      const box = document.getElementById('suggestions-explain');
+      if (!box) return;
+      const all = suggestionsCache || [];
+      if ((!pending || pending.length === 0) && all.length === 0) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+      let totalMinutes = 0;
+      let approvedMinutes = 0;
+      let estimatedMinutes = 0;
+      const taskTotals = new Map();
+      const prefs = new Set();
+      const estimatedByTask = new Map();
+      all.forEach(s => {
+        const st = new Date(s.start_time);
+        const et = new Date(s.end_time);
+        const minutes = Math.max(0, (et - st) / 60000);
+        const taskId = s.task_id;
+        const task = tasksById.get(taskId);
+        if (task?.time_preference) prefs.add(task.time_preference);
+        if (task?.estimated_minutes && !estimatedByTask.has(taskId)) {
+          estimatedByTask.set(taskId, Number(task.estimated_minutes) || 0);
+        }
+        if (s.status === 'approved') {
+          approvedMinutes += minutes;
+        }
+      });
+      estimatedByTask.forEach(v => { estimatedMinutes += v; });
+      pending.forEach(s => {
+        const st = new Date(s.start_time);
+        const et = new Date(s.end_time);
+        const minutes = Math.max(0, (et - st) / 60000);
+        totalMinutes += minutes;
+        const taskId = s.task_id;
+        const task = tasksById.get(taskId);
+        if (!taskTotals.has(taskId)) {
+          taskTotals.set(taskId, { minutes: 0, name: task?.name || s.task_name || 'Task' });
+        }
+        taskTotals.get(taskId).minutes += minutes;
+      });
+      const tasksSummary = Array.from(taskTotals.values())
+        .map(t => `${t.name}: ${formatHours(t.minutes)}`)
+        .slice(0, 3);
+      const prefText = prefs.size ? `Preferred windows: ${Array.from(prefs).join(', ')}` : 'Preferred windows from task settings';
+      const estimateText = estimatedMinutes > 0
+        ? `Scheduled so far: ${formatHours(approvedMinutes)} of ${formatHours(estimatedMinutes)}`
+        : `Scheduled so far: ${formatHours(approvedMinutes)}`;
+      box.innerHTML = `
+        <div class="title">Why these slots</div>
+        <div class="meta">Total suggested time: ${formatHours(totalMinutes)}</div>
+        <div class="meta">${estimateText}</div>
+        <ul>
+          <li>${prefText}</li>
+          <li>Earlier times are ranked higher to reduce procrastination.</li>
+          <li>Blocks avoid your busy calendar and already suggested slots.</li>
+          <li>Block length follows each task's focus level.</li>
+          ${tasksSummary.length ? `<li>Top tasks: ${tasksSummary.join(' · ')}</li>` : ''}
+        </ul>
+      `;
+      box.classList.remove('hidden');
+    }
+
     async function approve(id, el) {
       if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/approve`, { method: 'POST', body: JSON.stringify({ add_to_calendar: true }) });
+      await loadTasks();
       await loadSuggestions();
       await loadSchedule({ force: true });
     }
@@ -781,6 +949,7 @@ const API = 'http://localhost:8000';
     async function reject(id, el) {
       if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/reject`, { method: 'POST' });
+      await loadTasks();
       await loadSuggestions();
     }
 
@@ -795,10 +964,20 @@ const API = 'http://localhost:8000';
     }
 
     async function rejectAll() {
-      document.querySelectorAll('#suggestions-list [data-id]').forEach(el => el.classList.add('shrink-out'));
-      await api('/api/suggestions/reject-all', { method: 'POST' });
-      await loadSuggestions();
-      await loadSchedule();
+      const start = new Date();
+      start.setHours(0,0,0,0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      const limit = getSuggestCount();
+      try {
+        setSuggesting(true);
+        document.querySelectorAll('#suggestions-list [data-id]').forEach(el => el.classList.add('shrink-out'));
+        await api(`/api/suggestions/reject-all?start=${start.toISOString()}&end=${end.toISOString()}&limit=${limit}&resuggest=true`, { method: 'POST' });
+        await loadSuggestions();
+        await loadSchedule();
+      } finally {
+        setSuggesting(false);
+      }
     }
 
     document.getElementById('btn-connect-calendar').onclick = (e) => {

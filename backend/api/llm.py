@@ -15,6 +15,7 @@ router = APIRouter()
 
 class PlanRequest(BaseModel):
     task: str
+    task_id: Optional[str] = None
     # legacy structured preferences (JSON) kept for compatibility
     preferences: Optional[dict] = None
     # new free-text preferences
@@ -52,6 +53,18 @@ def _free_blocks_from_busy(busy: list, start_dt: datetime, end_dt: datetime) -> 
     return free
 
 
+def _coerce_minutes(value) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        minutes = int(float(value))
+    except Exception:
+        return None
+    if minutes < 0:
+        return None
+    return minutes
+
+
 def _client():
     if not settings.gemini_api_key:
         raise HTTPException(500, "Gemini API key not configured")
@@ -86,6 +99,23 @@ def plan_task(
         .execute()
     )
     profile = profile_r.data or {}
+    task_record = None
+    if body.task_id:
+        try:
+            task_r = (
+                supabase.table("tasks")
+                .select("id,name,description,difficulty,focus_level,time_preference,estimated_minutes")
+                .eq("id", body.task_id)
+                .eq("user_id", user_id)
+                .execute()
+            )
+        except Exception as e:
+            if "estimated_minutes" in str(e):
+                raise HTTPException(500, "DB migration missing: run 004_task_estimated_minutes.sql") from e
+            raise
+        if not task_r.data:
+            raise HTTPException(404, "Task not found")
+        task_record = task_r.data[0]
     prefs_structured = (
         body.preferences
         if body.preferences is not None
@@ -104,6 +134,7 @@ def plan_task(
 
     payload = {
         "task": body.task,
+        "task_record": task_record,
         "preferences_structured": prefs_structured,
         "preferences_text": prefs_text,
         "user_profile": {
@@ -139,7 +170,16 @@ def plan_task(
     except Exception:
         plan = {"raw": content}
 
+    estimated_minutes = None
+    if isinstance(plan, dict):
+        estimated_minutes = _coerce_minutes(plan.get("total_estimated_minutes"))
+        if estimated_minutes is not None and body.task_id:
+            supabase.table("tasks").update(
+                {"estimated_minutes": estimated_minutes}
+            ).eq("id", body.task_id).eq("user_id", user_id).execute()
+
     return {
         "plan": plan,
         "free_time_blocks": free_blocks,
+        "estimated_minutes": estimated_minutes,
     }
