@@ -1,6 +1,7 @@
 """Suggest time blocks from free-busy and task prefs; approve/reject."""
 from typing import Optional
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import math
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -11,10 +12,24 @@ from api.calendar import get_calendar_service, get_busy
 
 router = APIRouter()
 
-# Block lengths in minutes by focus_level
+# Block lengths in minutes by focus_level (fallbacks)
 FOCUS_MINUTES = {"short": 25, "medium": 50, "long": 90}
-# Preferred hour ranges (UTC) by time_preference: (start_hour, end_hour)
-PREF_HOURS = {"day": (9, 12), "midday": (12, 17), "night": (17, 23)}
+# Preferred hour ranges (local) by time_preference: (start_hour, end_hour)
+# day: 5am–11am, midday: 11am–8pm, night: 8pm–5am (wraps)
+PREF_HOURS = {"day": (5, 11), "midday": (11, 20), "night": (20, 29)}
+
+
+def _focus_minutes(value) -> int:
+    """Allow numeric focus minutes or legacy buckets."""
+    if value is None:
+        return 50
+    if isinstance(value, (int, float)):
+        return max(10, min(int(value), 240))
+    try:
+        num = int(float(value))
+        return max(10, min(num, 240))
+    except Exception:
+        return FOCUS_MINUTES.get(str(value), 50)
 # Cap pending suggestions per user to keep UI manageable
 MAX_SUGGESTIONS = 15
 
@@ -108,6 +123,16 @@ def _score_slot(slot_start: datetime, range_start: datetime, pref_center_minutes
     return (-minutes_from_start) - (0.1 * pref_distance)
 
 
+def _within_pref_window(dt: datetime, pref: str) -> bool:
+    h = dt.hour
+    if pref == "day":
+        return 5 <= h < 11  # Morning
+    if pref == "midday":
+        return 11 <= h < 20  # Midday
+    # night window wraps: 20:00–24:00 and 00:00–05:00
+    return h >= 20 or h < 5
+
+
 def _generate_suggestions_for_task(
     task: dict,
     user_id: str,
@@ -115,24 +140,43 @@ def _generate_suggestions_for_task(
     start_dt: datetime,
     end_dt: datetime,
     limit: int,
+    tz: timezone,
 ):
-    duration_min = FOCUS_MINUTES.get(task["focus_level"], 50)
+    duration_min = _focus_minutes(task.get("focus_minutes") or task.get("focus_level"))
     pref = task.get("time_preference", "midday")
-    h_start, h_end = PREF_HOURS.get(pref, (12, 17))
+    h_start, h_end = PREF_HOURS.get(pref, (11, 20))
     pref_center_minutes = int(((h_start + h_end) / 2) * 60)
 
-    # Narrow to preferred hours on each day
+    # Narrow to preferred hours on each day (local hours)
     candidates = []
     d = start_dt.date()
     while d <= end_dt.date():
-        day_start = datetime(d.year, d.month, d.day, h_start, 0, 0, tzinfo=start_dt.tzinfo)
-        day_end = datetime(d.year, d.month, d.day, h_end, 0, 0, tzinfo=start_dt.tzinfo)
-        if day_start < start_dt:
-            day_start = start_dt
-        if day_end > end_dt:
-            day_end = end_dt
-        if day_start < day_end:
-            candidates.append((day_start, day_end))
+        # handle night window that wraps past midnight (e.g., 20 -> 29 == 5 next day)
+        if h_end > 24:
+            first_end = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=start_dt.tzinfo)
+            day_start = datetime(d.year, d.month, d.day, h_start, 0, 0, tzinfo=start_dt.tzinfo)
+            if day_start < start_dt:
+                day_start = start_dt
+            if day_start < first_end:
+                candidates.append((day_start, first_end))
+            next_day = d + timedelta(days=1)
+            wrap_end = datetime(next_day.year, next_day.month, next_day.day, (h_end - 24), 0, 0, tzinfo=start_dt.tzinfo)
+            wrap_start = datetime(next_day.year, next_day.month, next_day.day, 0, 0, 0, tzinfo=start_dt.tzinfo)
+            if wrap_start < start_dt:
+                wrap_start = start_dt
+            if wrap_end > end_dt:
+                wrap_end = end_dt
+            if wrap_start < wrap_end:
+                candidates.append((wrap_start, wrap_end))
+        else:
+            day_start = datetime(d.year, d.month, d.day, h_start, 0, 0, tzinfo=start_dt.tzinfo)
+            day_end = datetime(d.year, d.month, d.day, h_end, 0, 0, tzinfo=start_dt.tzinfo)
+            if day_start < start_dt:
+                day_start = start_dt
+            if day_end > end_dt:
+                day_end = end_dt
+            if day_start < day_end:
+                candidates.append((day_start, day_end))
         d += timedelta(days=1)
 
     # Clear any pending suggestions for this task to avoid duplicates/clutter
@@ -163,26 +207,63 @@ def _generate_suggestions_for_task(
             if key in seen:
                 continue
             seen.add(key)
-            score = _score_slot(parse_iso(s_start), start_dt, pref_center_minutes)
+            start_dt_slot = parse_iso(s_start)
+            if start_dt_slot.tzinfo is None:
+                start_dt_slot = start_dt_slot.replace(tzinfo=timezone.utc)
+            end_dt_slot = parse_iso(s_end)
+            if end_dt_slot.tzinfo is None:
+                end_dt_slot = end_dt_slot.replace(tzinfo=timezone.utc)
+            local_start = start_dt_slot.astimezone(tz)
+            local_end = end_dt_slot.astimezone(tz)
+            if not (_within_pref_window(local_start, pref) and _within_pref_window(local_end, pref)):
+                continue
+            score = _score_slot(start_dt_slot, start_dt, pref_center_minutes)
             ranked_slots.append((score, s_start, s_end))
 
     ranked_slots.sort(key=lambda row: (row[0], row[1]), reverse=True)
+
+    # Spread picks across days to avoid clustering
+    by_day: dict[str, list] = {}
+    for score, s_start, s_end in ranked_slots:
+        day = s_start.split('T', 1)[0]
+        by_day.setdefault(day, []).append((score, s_start, s_end))
+    # keep per-day order by score (already sorted globally), so lists are in encountered order
+    days = sorted(by_day.keys())
     suggestions_list = []
-    for _, s_start, s_end in ranked_slots[:limit]:
-        r = (
-            supabase.table("suggested_slots")
-            .insert(
-                {
-                    "task_id": task["id"],
-                    "user_id": user_id,
-                    "start_time": s_start,
-                    "end_time": s_end,
-                    "status": "pending",
-                }
-            )
-            .execute()
-        )
-        suggestions_list.append(r.data[0])
+    while len(suggestions_list) < limit and any(by_day.values()):
+        for d in days:
+            if len(suggestions_list) >= limit:
+                break
+            bucket = by_day.get(d, [])
+            if bucket:
+                score, s_start, s_end = bucket.pop(0)
+                # final guard on window before insert
+                st = parse_iso(s_start)
+                if st.tzinfo is None:
+                    st = st.replace(tzinfo=timezone.utc)
+                en = parse_iso(s_end)
+                if en.tzinfo is None:
+                    en = en.replace(tzinfo=timezone.utc)
+                st_local = st.astimezone(tz)
+                en_local = en.astimezone(tz)
+                if not (_within_pref_window(st_local, pref) and _within_pref_window(en_local, pref)):
+                    continue
+                r = (
+                    supabase.table("suggested_slots")
+                    .insert(
+                        {
+                            "task_id": task["id"],
+                            "user_id": user_id,
+                            "start_time": s_start,
+                            "end_time": s_end,
+                            "status": "pending",
+                        }
+                    )
+                    .execute()
+                )
+                suggestions_list.append(r.data[0])
+        # remove empty buckets
+        by_day = {k: v for k, v in by_day.items() if v}
     return suggestions_list
 
 
@@ -222,13 +303,18 @@ def suggest_slots(
     task = tr.data
 
     start_dt, end_dt = clamp_range(start, end)
+    # Force EST (America/New_York) to avoid missing/invalid timezone data
+    try:
+        tz = ZoneInfo("America/New_York")
+    except Exception:
+        tz = timezone.utc
     approved_minutes = _approved_minutes_for_task(supabase, task_id, user_id)
     limit = _desired_limit_for_task(task, approved_minutes, limit)
     if _task_complete(task, approved_minutes):
         supabase.table("suggested_slots").delete().eq("task_id", task_id).eq("user_id", user_id).eq("status", "pending").execute()
         return []
 
-    return _generate_suggestions_for_task(task, user_id, supabase, start_dt, end_dt, limit)
+    return _generate_suggestions_for_task(task, user_id, supabase, start_dt, end_dt, limit, tz)
 
 
 @router.get("")

@@ -19,7 +19,9 @@ const API = 'http://localhost:8000';
     const LLM_ESTIMATE_TTL_MS = 24 * 60 * 60 * 1000;
     const LLM_ESTIMATE_KEY = 'skedule_estimate_attempt:';
     const llmEstimateInFlight = new Set();
+    let currentReasonTaskName = 'your task';
     let showExplain = false;
+    let currentAppTab = 'planner';
     let viewMode = 'week'; // default and only mode now
     let viewAnchor = new Date();
     let calendarAutoCentered = false;
@@ -27,7 +29,7 @@ const API = 'http://localhost:8000';
     const CAL_START_HOUR = 0;
     const CAL_END_HOUR = 24;
     const HOUR_HEIGHT = 64;
-    const VISIBLE_HOURS = 12;
+    const VISIBLE_HOURS = 12; // show a 12-hour viewport; users scroll for other hours
 
     function getToken() {
       return session?.access_token || '';
@@ -90,16 +92,6 @@ const API = 'http://localhost:8000';
                   <input type="text" name="display_name" placeholder="Your name"
                     class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]" />
                 </div>
-                <div>
-                  <label class="block text-sm text-[var(--muted)] mb-1">Timezone</label>
-                  <input type="text" name="timezone" placeholder="Timezone from Google Calendar"
-                    class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]" />
-                </div>
-                <div>
-                  <label class="block text-sm text-[var(--muted)] mb-1">Preferences</label>
-                  <textarea name="profile_preferences" rows="3" placeholder="e.g., Prefer mornings, avoid meetings on Fridays, 90-min deep work."
-                    class="w-full px-3 py-2 bg-white border border-[var(--panel-border)] rounded-lg text-[var(--text)] placeholder-[var(--muted)]"></textarea>
-                </div>
                 <div class="calendar-connection">
                   <div class="flex items-center gap-3">
                     <span class="google-mark" aria-hidden="true">
@@ -154,14 +146,101 @@ const API = 'http://localhost:8000';
       }
     }
 
+    function updateAppTabs() {
+      const tabs = document.getElementById('app-tabs');
+      if (!tabs) return;
+      tabs.classList.toggle('hidden', !session);
+      tabs.querySelectorAll('[data-app-tab]').forEach((btn) => {
+        const isActive = btn.dataset.appTab === currentAppTab;
+        btn.classList.toggle('active', isActive);
+      });
+    }
+
+    function setAppTab(tab = 'planner') {
+      const home = document.getElementById('home-screen');
+      const homeContent = document.getElementById('home-content');
+      const main = document.getElementById('main-screen');
+
+      if (!session) {
+        currentAppTab = 'home';
+        if (home) home.classList.remove('hidden');
+        if (home) home.classList.remove('home-screen-compact');
+        if (homeContent) homeContent.classList.remove('hidden');
+        if (main) main.classList.add('hidden');
+        updateAppTabs();
+        return;
+      }
+
+      currentAppTab = tab === 'home' ? 'home' : 'planner';
+      if (home) home.classList.remove('hidden');
+      if (home) home.classList.toggle('home-screen-compact', currentAppTab === 'planner');
+      if (homeContent) homeContent.classList.toggle('hidden', currentAppTab !== 'home');
+      if (main) main.classList.toggle('hidden', currentAppTab !== 'planner');
+      updateAppTabs();
+    }
+
+    function bindTopTabs() {
+      document.querySelectorAll('[data-app-tab]').forEach((btn) => {
+        btn.onclick = () => {
+          setAppTab(btn.dataset.appTab);
+        };
+      });
+    }
+
     function showMain() {
-      document.getElementById('login-screen').classList.add('hidden');
-      document.getElementById('main-screen').classList.remove('hidden');
+      setAppTab('planner');
     }
 
     function showLogin() {
-      document.getElementById('login-screen').classList.remove('hidden');
-      document.getElementById('main-screen').classList.add('hidden');
+      setAppTab('home');
+    }
+
+    function bindHomeActions() {
+      const signInWithGoogle = async () => {
+        if (session) {
+          setAppTab('planner');
+          return;
+        }
+        if (!sb) return;
+        await sb.auth.signInWithOAuth({ provider: 'google' });
+      };
+      ['btn-google', 'btn-google-hero'].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.onclick = signInWithGoogle;
+      });
+      const flowBtn = document.getElementById('btn-scroll-login');
+      if (flowBtn) {
+        flowBtn.onclick = () => {
+          if (session) {
+            setAppTab('planner');
+            return;
+          }
+          const home = document.getElementById('home-screen');
+          if (home) home.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+      }
+      const openPlannerBtn = document.getElementById('btn-open-planner-home');
+      if (openPlannerBtn) {
+        openPlannerBtn.onclick = async () => {
+          if (session) {
+            setAppTab('planner');
+            return;
+          }
+          await signInWithGoogle();
+        };
+      }
+    }
+
+    function showStartupError(message) {
+      const home = document.getElementById('home-screen');
+      if (!home) return;
+      const existing = document.getElementById('startup-error');
+      if (existing) existing.remove();
+      const el = document.createElement('p');
+      el.id = 'startup-error';
+      el.className = 'text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3';
+      el.textContent = message;
+      home.prepend(el);
     }
 
     function setCalendarConnected(connected) {
@@ -261,6 +340,106 @@ const API = 'http://localhost:8000';
       return `${y}-${m}-${day}`;
     }
 
+    function minutesLabel(totalMinutes) {
+      const mins = Math.max(0, Math.round(totalMinutes || 0));
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h && m) return `${h}h ${m}m`;
+      if (h) return `${h}h`;
+      return `${m}m`;
+    }
+
+    function buildBusyMinutesByDay(start, days) {
+      const byDay = {};
+      for (let i = 0; i < days; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        byDay[dayKey(d)] = 0;
+      }
+
+      const allDayIntervals = [];
+      (calendarEvents || []).forEach((ev) => {
+        if (!ev?.all_day) return;
+        if (!ev.start || !ev.end) return;
+        const allDayStart = parseAllDayDate(ev.start);
+        let allDayEnd = parseAllDayDate(ev.end);
+        if (Number.isNaN(allDayStart.getTime()) || Number.isNaN(allDayEnd.getTime())) return;
+        if (allDayEnd <= allDayStart) {
+          allDayEnd = new Date(allDayStart);
+          allDayEnd.setDate(allDayEnd.getDate() + 1);
+        }
+        allDayIntervals.push({ start: allDayStart, end: allDayEnd });
+      });
+
+      (calendarBusy || []).forEach((b) => {
+        const segStart = new Date(b.start);
+        const segEnd = new Date(b.end);
+        if (!(segStart instanceof Date) || Number.isNaN(segStart.getTime())) return;
+        if (!(segEnd instanceof Date) || Number.isNaN(segEnd.getTime())) return;
+        if (segEnd <= segStart) return;
+        const cursor = new Date(segStart);
+        cursor.setHours(0, 0, 0, 0);
+        while (cursor < segEnd) {
+          const next = new Date(cursor);
+          next.setDate(cursor.getDate() + 1);
+          const overlapStart = segStart > cursor ? segStart : cursor;
+          const overlapEnd = segEnd < next ? segEnd : next;
+          if (overlapEnd > overlapStart) {
+            const key = dayKey(cursor);
+            if (Object.prototype.hasOwnProperty.call(byDay, key)) {
+              let segmentMinutes = (overlapEnd - overlapStart) / 60000;
+              allDayIntervals.forEach((ad) => {
+                const cutStart = ad.start > overlapStart ? ad.start : overlapStart;
+                const cutEnd = ad.end < overlapEnd ? ad.end : overlapEnd;
+                if (cutEnd > cutStart) {
+                  segmentMinutes -= (cutEnd - cutStart) / 60000;
+                }
+              });
+              if (segmentMinutes > 0) byDay[key] += segmentMinutes;
+            }
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      });
+      return byDay;
+    }
+
+    function renderPlannerWeeklyPlan(start, days) {
+      const bars = document.getElementById('planner-weekly-bars');
+      const status = document.getElementById('planner-weekly-status');
+      if (!bars || !status) return;
+      if (!calendarConnected) {
+        bars.innerHTML = '';
+        status.textContent = 'Connect Google Calendar to see busy time';
+        return;
+      }
+
+      const busyByDay = buildBusyMinutesByDay(start, days);
+      const keys = Object.keys(busyByDay);
+      const max = keys.reduce((m, k) => Math.max(m, busyByDay[k]), 0);
+      const total = keys.reduce((s, k) => s + busyByDay[k], 0);
+      status.textContent = `Total busy: ${minutesLabel(total)}`;
+
+      let html = '';
+      for (let i = 0; i < days; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const key = dayKey(d);
+        const minutes = busyByDay[key] || 0;
+        const pct = max > 0 ? Math.max(6, Math.round((minutes / max) * 100)) : 0;
+        html += `
+          <div class="planner-weekly-row">
+            <span class="planner-weekly-day">${d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+            <div class="planner-weekly-track">
+              <div class="planner-weekly-fill" style="width:${pct}%;"></div>
+            </div>
+            <span class="planner-weekly-time">${minutesLabel(minutes)}</span>
+          </div>
+        `;
+      }
+      bars.innerHTML = html;
+    }
+
     function startOfWeek(d) {
       const date = new Date(d);
       date.setHours(0, 0, 0, 0);
@@ -295,10 +474,6 @@ const API = 'http://localhost:8000';
 
       const timeCol = document.createElement('div');
       timeCol.className = 'calendar-time-col';
-      const allDayLabel = document.createElement('div');
-      allDayLabel.className = 'time time-all-day';
-      allDayLabel.textContent = 'All Day';
-      timeCol.appendChild(allDayLabel);
       for (let h = CAL_START_HOUR; h < CAL_END_HOUR; h++) {
         const label = new Date(2000, 0, 1, h, 0, 0).toLocaleTimeString([], { hour: 'numeric' });
         const t = document.createElement('div');
@@ -315,10 +490,7 @@ const API = 'http://localhost:8000';
         const key = dayKey(day);
         const col = document.createElement('div');
         col.className = 'calendar-day-col';
-        const allDayRow = document.createElement('div');
-        allDayRow.className = 'all-day-row';
-        col.appendChild(allDayRow);
-        col.style.paddingTop = '36px'; // base space for all-day row
+        col.style.paddingTop = '0px';
         col.dataset.day = key;
         inner.appendChild(col);
         dayCols[key] = col;
@@ -370,22 +542,13 @@ const API = 'http://localhost:8000';
       return block;
     }
 
-    function placeAllDayChip(dayCols, day, label, idx = 0) {
-      const key = dayKey(day);
-      const col = dayCols[key];
+    function placeAllDayChipStrip(col, label) {
       if (!col) return;
-      const row = col.querySelector('.all-day-row');
       const chip = document.createElement('div');
       chip.className = 'all-day-chip';
       chip.textContent = label || 'All day';
       chip.title = label || 'All day';
-      if (row) {
-        row.appendChild(chip);
-        const needed = row.offsetHeight + 12; // chips height plus gap
-        col.style.paddingTop = `${needed}px`;
-      } else {
-        col.appendChild(chip);
-      }
+      col.appendChild(chip);
     }
 
     function parseAllDayDate(dateStr) {
@@ -450,17 +613,12 @@ const API = 'http://localhost:8000';
       (calendarEvents || []).forEach(ev => {
         const summary = ev.summary || 'Busy';
         const allDay = !!ev.all_day;
-        let s = allDay ? parseAllDayDate(ev.start) : new Date(ev.start);
-        let e = allDay ? parseAllDayDate(ev.end) : new Date(ev.end);
-        if (allDay && e <= s) {
-          e = new Date(s);
-          e.setDate(e.getDate() + 1);
-        }
+        if (allDay) return; // skip all-day events entirely in month view
+        const s = new Date(ev.start);
+        const e = new Date(ev.end);
         forEachDaySegment(s, e, (segStart) => {
           const key = dayKey(segStart);
-          const timeLabel = allDay
-            ? 'All day'
-            : `${segStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+          const timeLabel = `${segStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
           addChip(key, `${summary} • ${timeLabel}`);
         });
       });
@@ -490,6 +648,7 @@ const API = 'http://localhost:8000';
       const days = viewMode === 'day' ? 1 : (viewMode === 'week' ? 7 : 7);
 
       updateViewLabel();
+      renderPlannerWeeklyPlan(start, days);
 
       if (viewMode === 'month') {
         const header = document.getElementById('calendar-days-header');
@@ -524,30 +683,21 @@ const API = 'http://localhost:8000';
         placeBlock(dayCols, s, e, 'busy', 'Busy', { html: '', title: 'Busy' });
       });
 
-      const allDayStack = {};
+      const timedEvents = [];
       (calendarEvents || []).forEach(ev => {
         const summary = ev.summary || 'Busy';
-        const allDay = !!ev.all_day;
-        let s = allDay ? parseAllDayDate(ev.start) : new Date(ev.start);
-        let e = allDay ? parseAllDayDate(ev.end) : new Date(ev.end);
-        if (allDay && e <= s) {
-          e = new Date(s);
-          e.setDate(e.getDate() + 1);
-        }
-        if (allDay) {
-          forEachDaySegment(s, e, (segStart) => {
-            const key = dayKey(segStart);
-            const idx = allDayStack[key] || 0;
-            placeAllDayChip(dayCols, segStart, summary, idx);
-            allDayStack[key] = idx + 1;
+        if (ev.all_day) return; // skip all-day events entirely
+        const s = new Date(ev.start);
+        const e = new Date(ev.end);
+        timedEvents.push({ start: s, end: e, summary });
+      });
+
+      timedEvents.forEach(ev => {
+        forEachDaySegment(ev.start, ev.end, (segStart, segEnd) => {
+          placeBlock(dayCols, segStart, segEnd, 'event', ev.summary, {
+            html: `<div class="block-title">${escapeHtml(ev.summary)}</div>`,
           });
-        } else {
-          forEachDaySegment(s, e, (segStart, segEnd) => {
-            placeBlock(dayCols, segStart, segEnd, 'event', summary, {
-              html: `<div class="block-title">${escapeHtml(summary)}</div>`,
-            });
-          });
-        }
+        });
       });
 
       const suggestionItems = Array.isArray(suggestionsCache?.items)
@@ -581,14 +731,14 @@ const API = 'http://localhost:8000';
         };
       });
 
-      // center initial scroll to ~7 AM so daytime is visible, but still scrollable to midnight
+      // default window starts at 7 AM (roughly 7am-7pm visible)
       if (!calendarAutoCentered) {
         centerCalendarTo(7);
         calendarAutoCentered = true;
       }
     }
 
-    function centerCalendarTo(hour = 6) {
+    function centerCalendarTo(hour = 7) {
       const grid = document.getElementById('calendar-grid');
       if (!grid) return;
       const target = Math.max(0, (hour - CAL_START_HOUR) * HOUR_HEIGHT);
@@ -659,31 +809,12 @@ const API = 'http://localhost:8000';
     async function loadProfile() {
       if (!getToken()) return;
       const profile = await api('/api/profile');
-      document.querySelector('[name="display_name"]').value = profile.display_name || '';
-      const tzInput = document.querySelector('[name="timezone"]');
-      if (profile.timezone === null || profile.timezone === undefined) {
-        tzInput.value = '';
-        tzInput.disabled = true;
-        tzInput.placeholder = 'Timezone from Google Calendar';
-      } else {
-        tzInput.disabled = false;
-        tzInput.value = profile.timezone || '';
-        tzInput.placeholder = 'America/Los_Angeles';
-      }
-      const prefsText = profile.preferences_text ?? (
-        typeof profile.preferences === 'string'
-          ? profile.preferences
-          : (profile.preferences ? JSON.stringify(profile.preferences, null, 2) : '')
-      );
-      document.querySelector('[name="profile_preferences"]').value = prefsText;
+      const nameInput = document.querySelector('[name="display_name"]');
+      if (nameInput) nameInput.value = profile.display_name || '';
       setCalendarConnected(profile.calendar_connected);
     }
 
     // profile form handler is set in setupProfileForm when the menu is rendered
-
-    document.getElementById('btn-google').onclick = async () => {
-      await sb.auth.signInWithOAuth({ provider: 'google' });
-    };
 
     async function loadConfig() {
       const res = await fetch(`${API}/api/config`);
@@ -695,10 +826,11 @@ const API = 'http://localhost:8000';
 
     async function initSupabase() {
       if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        document.getElementById('login-screen').innerHTML = '<p class="text-amber-500">Missing Supabase config. Check backend /api/config and backend/.env</p>';
+        showStartupError('Missing Supabase config. Check backend /api/config and backend/.env');
         return;
       }
       sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      bindHomeActions();
       const { data: { session: s } } = await sb.auth.getSession();
       session = s;
       if (session) showMain(); else showLogin();
@@ -727,20 +859,28 @@ const API = 'http://localhost:8000';
     document.getElementById('task-form').onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
+      const focusMinutes = Number(fd.get('focus_minutes') || 50);
+      const focusBucket = (mins) => {
+        if (mins <= 35) return 'short';
+        if (mins <= 70) return 'medium';
+        return 'long';
+      };
       const created = await api('/api/tasks', {
         method: 'POST',
         body: JSON.stringify({
           name: fd.get('name'),
           description: fd.get('description') || '',
           difficulty: fd.get('difficulty'),
-          focus_level: fd.get('focus_level'),
+          focus_minutes: focusMinutes,
+          focus_level: focusBucket(focusMinutes),
           time_preference: fd.get('time_preference'),
         }),
       });
       e.target.reset();
       loadTasks();
+      // No auto-suggest; user can trigger from the task card
       if (created?.id) {
-        await suggestSlots(created.id);
+        // intentionally not calling suggestSlots here
       }
     };
 
@@ -795,10 +935,10 @@ const API = 'http://localhost:8000';
 
         return `
           <div class="p-3 card space-y-2 pop-in" data-task-id="${t.id}">
-            <div class="flex justify-between items-center">
-              <div>
+            <div class="flex flex-wrap items-center gap-2 justify-between">
+              <div class="flex items-center gap-2">
                 <span class="font-medium text-[var(--text)]">${escapeHtml(t.name)}</span>
-                <span class="text-[var(--muted)] text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
+                <span class="text-[var(--muted)] text-sm">${t.focus_level} · ${t.time_preference}</span>
                 <span class="task-complete-badge ${t.is_complete ? '' : 'hidden'}" data-complete-badge="${t.id}">
                   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M5 10.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -828,7 +968,12 @@ const API = 'http://localhost:8000';
       };
       collapseAllExcept(null);
       el.querySelectorAll('.suggest-slots').forEach(btn => {
-        btn.onclick = () => suggestSlots(btn.dataset.taskId);
+        btn.onclick = () => {
+          const task = tasksById.get(btn.dataset.taskId);
+          const name = task?.name || 'your task';
+          renderSuggestionsExplain([], { showLoading: true, taskName: name });
+          suggestSlots(btn.dataset.taskId, { showLoading: true, taskName: name });
+        };
       });
       el.querySelectorAll('.delete-task').forEach(btn => {
         btn.onclick = () => {
@@ -876,10 +1021,8 @@ const API = 'http://localhost:8000';
     }
 
     function getSuggestCount() {
-      const input = document.getElementById('suggest-count');
-      const v = Number(String(input?.value || '').replace(/[^0-9]/g, ''));
-      if (Number.isNaN(v) || v < 3) return 3;
-      return Math.min(20, v);
+      // Randomize between 3 and 5 to keep suggestions light
+      return 3 + Math.floor(Math.random() * 3); // 3,4,5
     }
 
     function setSuggesting(flag) {
@@ -941,7 +1084,7 @@ const API = 'http://localhost:8000';
       }
     }
 
-    async function suggestSlots(taskId) {
+    async function suggestSlots(taskId, { showLoading = false, taskName = null } = {}) {
       const start = new Date();
       start.setHours(0,0,0,0);
       const end = new Date(start);
@@ -949,11 +1092,11 @@ const API = 'http://localhost:8000';
       try {
         setSuggesting(true);
         showExplain = true;
-        renderSuggestionsExplain([], { showLoading: true });
+        if (showLoading) renderSuggestionsExplain([], { showLoading: true, taskName });
         const limit = getSuggestCount();
         await ensureTaskEstimate(taskId, start, end);
         await api(`/api/suggestions/suggest/${taskId}?start=${start.toISOString()}&end=${end.toISOString()}&limit=${limit}`, { method: 'POST' });
-        await loadSuggestions({ showLoading: true });
+        await loadSuggestions({ showLoading, taskName });
       } catch (e) {
         const msg = e.message || '';
         if (e.status === 400 && /maximum pending suggestions/i.test(msg)) {
@@ -966,9 +1109,9 @@ const API = 'http://localhost:8000';
       }
     }
 
-    async function loadSuggestions({ showLoading = false, skipExplain = false } = {}) {
+    async function loadSuggestions({ showLoading = false, skipExplain = false, taskName = null } = {}) {
       if (showExplain && !skipExplain && showLoading) {
-        boxLoading();
+        boxLoading(taskName || currentReasonTaskName);
       } else if (!showExplain) {
         renderSuggestionsExplain([], { reset: true });
       }
@@ -976,7 +1119,7 @@ const API = 'http://localhost:8000';
       const items = Array.isArray(list?.items) ? list.items : (Array.isArray(list) ? list : []);
       suggestionsCache = items;
       const pending = items.filter(s => s.status === 'pending');
-      if (!skipExplain && showExplain) renderSuggestionsExplain(pending);
+      if (!skipExplain && showExplain) renderSuggestionsExplain(pending, { taskName: taskName || currentReasonTaskName });
       await loadTasks();
       renderSchedule();
     }
@@ -1033,10 +1176,12 @@ const API = 'http://localhost:8000';
 
     
     
-    function boxLoading() {
-      renderSuggestionsExplain([], { showLoading: true });
+    function boxLoading(name = null) {
+      if (name) currentReasonTaskName = name;
+      renderSuggestionsExplain([], { showLoading: true, taskName: currentReasonTaskName });
     }
-function renderSuggestionsExplain(pending, { showLoading = false, reset = false } = {}) {
+function renderSuggestionsExplain(pending, { showLoading = false, reset = false, taskName = 'Your task' } = {}) {
+      if (taskName) currentReasonTaskName = taskName;
       const box = document.getElementById('suggestions-explain');
       if (!box) return;
       if (reset) {
@@ -1051,7 +1196,7 @@ function renderSuggestionsExplain(pending, { showLoading = false, reset = false 
       }
       if (showLoading) {
         box.classList.remove('hidden');
-        box.innerHTML = '<div class="title">Reasoning</div><p class="friendly">Generating…</p>';
+        box.innerHTML = `<div class="title">Reasoning</div><p class="friendly">Hang on, I'm placing ${taskName || 'this task'}…</p>`;
         return;
       }
       const all = suggestionsCache || [];
@@ -1060,6 +1205,10 @@ function renderSuggestionsExplain(pending, { showLoading = false, reset = false 
         box.innerHTML = '';
         return;
       }
+
+      const first = pending && pending.length ? pending[0] : all[0];
+      const task = first ? tasksById.get(first.task_id) : null;
+      const taskNameResolved = taskName || task?.name || first?.task_name || 'your task';
 
       const findNeighborEvents = (startIso) => {
         if (!Array.isArray(calendarEvents) || calendarEvents.length === 0) return {};
@@ -1070,32 +1219,23 @@ function renderSuggestionsExplain(pending, { showLoading = false, reset = false 
           const evStart = new Date(ev.start).getTime();
           const evEnd = new Date(ev.end).getTime();
           if (evEnd <= start && (!before || evEnd > before.end)) {
-            before = { end: evEnd, title: ev.summary || 'an event' };
+            before = { end: evEnd, title: ev.summary || 'another thing' };
           }
           if (evStart >= start && (!after || evStart < after.start)) {
-            after = { start: evStart, title: ev.summary || 'an event' };
+            after = { start: evStart, title: ev.summary || 'another thing' };
           }
         });
         return { before, after };
       };
 
-      const highlights = (pending || []).slice(0, 2).map(s => {
-        const neighbors = findNeighborEvents(s.start_time);
-        const before = neighbors.before ? neighbors.before.title : null;
-        const after = neighbors.after ? neighbors.after.title : null;
-        const task = tasksById.get(s.task_id);
-        const taskName = task?.name || s.task_name || 'Task';
-        if (before && after) return `${taskName} fits between ${before} and ${after}.`;
-        if (before) return `${taskName} follows ${before}.`;
-        if (after) return `${taskName} is before ${after}.`;
-        return `${taskName} sits in your open time.`;
-      });
+      const neighbor = first ? findNeighborEvents(first.start_time) : {};
+      let placement = '';
+      if (neighbor.before && neighbor.after) placement = `${taskNameResolved} fits neatly between ${neighbor.before.title} and ${neighbor.after.title}.`;
+      else if (neighbor.before) placement = `${taskNameResolved} rolls in after ${neighbor.before.title}.`;
+      else if (neighbor.after) placement = `${taskNameResolved} slides in before ${neighbor.after.title}.`;
+      else placement = `${taskNameResolved} chills in open time—no clashes.`;
 
-      const parts = [];
-      if (highlights.length) parts.push(highlights.join(' '));
-      parts.push("We match each block to the task's focus length and steer clear of your events.");
-
-      const textContent = parts.join(' ');
+      const textContent = `${placement} I kept the block to your focus length and steered clear of your other events.`;
       box.innerHTML = `
         <div class="title">Reasoning</div>
         <p class="friendly">${textContent}</p>
@@ -1104,20 +1244,49 @@ function renderSuggestionsExplain(pending, { showLoading = false, reset = false 
     }
 
     async function approve(id, el) {
-      const taskId = el?.dataset?.suggestionTask || null;
+      // try to derive the task id and suggestion info
+      let taskId = el?.dataset?.suggestionTask || null;
+      let sug = null;
+      if (Array.isArray(suggestionsCache)) {
+        sug = suggestionsCache.find(s => String(s.id) === String(id)) || null;
+        if (!taskId && sug) taskId = sug.task_id;
+      }
+
       if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/approve`, { method: 'POST', body: JSON.stringify({ add_to_calendar: true }) });
+
+      // Optimistically update frontend state (no extra reloads)
       if (taskId) {
+        // drop suggestions for this task from cache
+        suggestionsCache = (suggestionsCache || []).filter(s => String(s.task_id) !== String(taskId));
+        // drop task from caches/maps
+        tasksCache = (tasksCache || []).filter(t => String(t.id) !== String(taskId));
+        tasksById.delete(String(taskId));
+        // remove suggestion/task cards in DOM
+        document.querySelectorAll(`[data-suggestion-task="${taskId}"]`).forEach(n => n.remove());
+        document.querySelectorAll(`[data-task-id="${taskId}"]`).forEach(n => n.remove());
         try {
           await api(`/api/suggestions/reject-all?task_id=${encodeURIComponent(taskId)}`, { method: 'POST' });
           await api(`/api/tasks/${taskId}`, { method: 'DELETE' });
         } catch (e) {
-          // ignore cleanup errors
+          console.warn('Cleanup after approve failed', e);
         }
       }
-      await loadTasks();
-      await loadSuggestions({ skipExplain: true });
-      await loadSchedule({ force: true });
+
+      // Add the new event to the calendar view without refetch
+      if (sug) {
+        const ev = {
+          summary: sug.task_name || tasksById.get(taskId)?.name || 'Task',
+          start: sug.start_time,
+          end: sug.end_time,
+          all_day: false,
+        };
+        calendarEvents = Array.isArray(calendarEvents) ? [...calendarEvents, ev] : [ev];
+      }
+
+      // Re-render lists using cached data (no network lag)
+      await loadTasks(); // uses tasksCache to rebuild UI
+      renderSchedule();
     }
 
     async function reject(id, el) {
@@ -1206,6 +1375,7 @@ function renderSuggestionsExplain(pending, { showLoading = false, reset = false 
       };
     }
 
+    bindTopTabs();
     updateViewButtons();
     renderSchedule();
 
@@ -1240,5 +1410,17 @@ function renderSuggestionsExplain(pending, { showLoading = false, reset = false 
         }
       })
       .catch((e) => {
-        document.getElementById('login-screen').innerHTML = `<p class="text-amber-500">${e.message || 'Failed to load config'}</p>`;
+        showStartupError(e.message || 'Failed to load config');
       });
+
+function showSuggestionCapNotice(message = '') {
+  const pill = document.getElementById('suggest-limit');
+  if (pill) {
+    pill.classList.remove('hidden');
+    pill.textContent = `Max 15 suggestions`;}
+  document.querySelectorAll('.suggest-slots').forEach(btn => {
+    btn.classList.add('shake');
+    setTimeout(() => btn.classList.remove('shake'), 420);
+  });
+  if (message) console.warn(message);
+}

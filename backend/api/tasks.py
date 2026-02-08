@@ -55,12 +55,21 @@ class TimePreference(str, Enum):
     NIGHT = "night"
 
 
+def _bucket_for_minutes(minutes: Optional[int]) -> FocusLevel:
+    if minutes is None:
+        return FocusLevel.MEDIUM
+    if minutes <= 35:
+        return FocusLevel.SHORT
+    if minutes <= 70:
+        return FocusLevel.MEDIUM
+    return FocusLevel.LONG
+
+
 class TaskCreate(BaseModel):
-    # Mandatory fields
     name: str
     difficulty: DifficultyLevel
-    focus_level: FocusLevel
-    # Optional fields
+    focus_level: Optional[FocusLevel] = None
+    focus_minutes: Optional[int] = None
     description: Optional[str] = None
     time_preference: Optional[TimePreference] = None
 
@@ -77,6 +86,7 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = None
     difficulty: Optional[DifficultyLevel] = None
     focus_level: Optional[FocusLevel] = None
+    focus_minutes: Optional[int] = None
     time_preference: Optional[TimePreference] = None
 
 
@@ -101,19 +111,23 @@ def create_task(
     user_id: str = Depends(get_current_user_id),
     supabase=Depends(get_supabase),
 ):
+    focus_minutes = body.focus_minutes
+    focus_level = body.focus_level or _bucket_for_minutes(body.focus_minutes)
+
     task_data = {
         "user_id": user_id,
         "name": body.name,
         "difficulty": body.difficulty.value,
-        "focus_level": body.focus_level.value,
+        "focus_level": focus_level.value,
     }
-    
-    # Add optional fields if provided
+
+    if focus_minutes is not None:
+        task_data["focus_minutes"] = max(10, min(int(focus_minutes), 240))
     if body.description is not None:
         task_data["description"] = body.description
     if body.time_preference is not None:
         task_data["time_preference"] = body.time_preference.value
-    
+
     r = supabase.table("tasks").insert(task_data).execute()
     
     if not r.data:
@@ -137,6 +151,8 @@ def get_task(
     estimated = task.get("estimated_minutes")
     task["approved_minutes"] = approved
     task["is_complete"] = bool(estimated is not None and approved >= estimated)
+    task["focus_minutes"] = task.get("focus_minutes")
+    task["focus_level"] = task.get("focus_level")
     return task
 
 
@@ -147,4 +163,41 @@ def delete_task(
     supabase=Depends(get_supabase),
 ):
     supabase.table("tasks").delete().eq("id", task_id).eq("user_id", user_id).execute()
+    return {"ok": True}
+
+
+@router.put("/{task_id}")
+def update_task(
+    task_id: str,
+    body: TaskUpdate,
+    user_id: str = Depends(get_current_user_id),
+    supabase=Depends(get_supabase),
+):
+    updates = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.description is not None:
+        updates["description"] = body.description
+    if body.difficulty is not None:
+        updates["difficulty"] = body.difficulty.value
+    if body.focus_minutes is not None:
+        updates["focus_minutes"] = max(10, min(int(body.focus_minutes), 240))
+        updates["focus_level"] = _bucket_for_minutes(updates["focus_minutes"]).value
+    elif body.focus_level is not None:
+        updates["focus_level"] = body.focus_level.value
+    if body.time_preference is not None:
+        updates["time_preference"] = body.time_preference.value
+
+    if not updates:
+        return {"ok": True, "updated": 0}
+
+    r = (
+        supabase.table("tasks")
+        .update(updates)
+        .eq("id", task_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if r.data is None:
+        raise HTTPException(404, "Task not found")
     return {"ok": True}

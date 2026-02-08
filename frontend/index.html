@@ -13,23 +13,96 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="min-h-screen">
-  <div id="app" class="max-w-7xl mx-auto px-6 py-4 w-full">
-    <!-- Header -->
-    <header class="flex justify-between items-center mb-3 pb-2 border-b border-white/10 relative">
-      <div>
-        <p class="text-sm text-gray-500 tracking-wide uppercase">Bridging your tasks in your schedule.</p>
-        <h1 class="text-3xl font-semibold text-black">Skedule</h1>
+  <div id="app" class="max-w-7xl mx-auto px-6 pt-0 pb-4 w-full">
+    <!-- Homepage -->
+    <section id="home-screen" class="home-screen mb-5">
+      <div class="home-header">
+        <div>
+          <p class="home-brand-kicker">Bridging your tasks in your schedule.</p>
+          <h1 class="home-brand-title">Skedule</h1>
+        </div>
+        <div class="home-header-controls">
+          <nav id="app-tabs" class="app-tabs hidden" aria-label="App sections">
+            <button type="button" data-app-tab="home" class="app-tab-btn">Home</button>
+            <button type="button" data-app-tab="planner" class="app-tab-btn">Planner</button>
+          </nav>
+          <div id="auth-area" class="text-black relative"></div>
+        </div>
       </div>
-      <div id="auth-area" class="text-black relative"></div>
-    </header>
 
-    <!-- Login -->
-    <div id="login-screen" class="text-center py-14 card">
-      <p class="text-[15px] text-[var(--muted)] mb-4">Sign in with Google to use Skedule</p>
-      <button id="btn-google" class="px-4 py-2.5 btn-accent pill text-sm font-medium">
-        Sign in with Google
-      </button>
-    </div>
+      <div id="home-content">
+        <div class="home-hero">
+          <div class="home-copy">
+            <p class="home-eyebrow">Smart Calendar Planning</p>
+            <h2>Skedule turns tasks into a plan you can actually follow.</h2>
+            <p class="home-lead">
+              Add what you need to do, connect Google Calendar, and Skedule places focused blocks in your week while steering clear of your events.
+            </p>
+            <div class="home-cta-row">
+              <button id="btn-google-hero" class="px-5 py-3 btn-accent pill text-sm font-semibold">Start with Google</button>
+              <button id="btn-scroll-login" type="button" class="pill px-4 py-2 text-sm font-semibold bg-white/80 border border-[var(--panel-border)] text-[var(--text)] hover:bg-white">
+                View planner flow
+              </button>
+            </div>
+            <div class="home-metrics">
+              <div class="metric-chip">
+                <span class="metric-dot"></span>
+                7-day placement window
+              </div>
+              <div class="metric-chip">Morning: 5am-11am</div>
+              <div class="metric-chip">Midday: 11am-8pm</div>
+              <div class="metric-chip">Night: 8pm-5am</div>
+            </div>
+          </div>
+          <div class="home-graphic" aria-hidden="true">
+            <div class="graphic-canvas">
+              <div class="orb orb-a"></div>
+              <div class="orb orb-b"></div>
+              <div class="orb orb-c"></div>
+              <div class="timeline-panel">
+                <p class="timeline-title">Weekly Plan</p>
+                <div class="timeline-row"><span>Mon</span><div class="bar bar-1"></div></div>
+                <div class="timeline-row"><span>Tue</span><div class="bar bar-2"></div></div>
+                <div class="timeline-row"><span>Wed</span><div class="bar bar-3"></div></div>
+                <div class="timeline-row"><span>Thu</span><div class="bar bar-4"></div></div>
+                <div class="timeline-row"><span>Fri</span><div class="bar bar-5"></div></div>
+              </div>
+              <div class="floating-chip chip-1">Essay Draft</div>
+              <div class="floating-chip chip-2">Gym + Recovery</div>
+              <div class="floating-chip chip-3">Review Notes</div>
+            </div>
+          </div>
+        </div>
+        <div class="home-flow">
+          <article class="flow-item">
+            <span class="flow-num">01</span>
+            <h3>Add your task</h3>
+            <p>Tell Skedule what you need to finish and how long you want to focus.</p>
+          </article>
+          <article class="flow-item">
+            <span class="flow-num">02</span>
+            <h3>Generate clean options</h3>
+            <p>We suggest 3-5 slots over the next 7 days around your calendar events.</p>
+          </article>
+          <article class="flow-item">
+            <span class="flow-num">03</span>
+            <h3>Accept and execute</h3>
+            <p>Pick the best slot and move directly into Planner to keep momentum.</p>
+          </article>
+        </div>
+
+        <section class="home-wide-cta">
+          <div>
+            <p class="home-wide-kicker">Ready when you are</p>
+            <h3>Home is for strategy. Planner is for action.</h3>
+            <p class="home-wide-copy">Switch to Planner to add tasks and start placing your week.</p>
+          </div>
+          <button id="btn-open-planner-home" type="button" class="pill px-4 py-2 text-sm font-semibold bg-white border border-[var(--panel-border)] text-[var(--text)] hover:bg-slate-50">
+            Open Planner
+          </button>
+        </section>
+      </div>
+    </section>
 
     <!-- Main (after login) -->
     <div id="main-screen" class="hidden space-y-5">
@@ -58,27 +131,30 @@
               <div class="grid grid-cols-3 gap-3">
                 <div class="field">
                   <label class="field-label">Difficulty</label>
-                  <select name="difficulty" class="field-input">
+                  <select name="difficulty" class="field-input field-select">
                     <option value="easy">Easy</option>
                     <option value="medium" selected>Medium</option>
                     <option value="hard">Hard</option>
                   </select>
+                  <p class="text-[11px] text-[var(--muted)]">Difficulty helps us select how often your task should be.</p>
                 </div>
                 <div class="field">
-                  <label class="field-label">Focus</label>
-                  <select name="focus_level" class="field-input">
-                    <option value="short">Short (25m)</option>
-                    <option value="medium" selected>Medium (50m)</option>
-                    <option value="long">Long (90m)</option>
-                  </select>
+                  <label class="field-label">Focus (minutes)</label>
+                  <input type="number" name="focus_minutes" min="10" max="240" value="50" class="field-input" />
+                  <p class="text-[11px] text-[var(--muted)]">Pick any duration. We’ll use this for block length.</p>
                 </div>
                 <div class="field">
                   <label class="field-label">Preference</label>
-                  <select name="time_preference" class="field-input">
-                    <option value="day">Day</option>
+                  <select name="time_preference" class="field-input field-select">
+                    <option value="day">Morning</option>
                     <option value="midday" selected>Midday</option>
                     <option value="night">Night</option>
                   </select>
+                  <div class="time-pref-hint">
+                    Morning · 5am–11am<br>
+                    Midday · 11am–8pm<br>
+                    Night · 8pm–5am
+                  </div>
                 </div>
               </div>
               <div class="hint-row">
@@ -88,8 +164,8 @@
             </div>
           </div>
           <div class="flex items-center gap-3 flex-wrap">
-            <button type="submit" class="px-4 py-2 btn-accent pill text-sm font-semibold shadow-sm">Add task &amp; suggest</button>
-            <p class="text-[13px] text-[var(--muted)]">Suggestions appear under “Your tasks”.</p>
+            <button type="submit" class="px-4 py-2 btn-accent pill text-sm font-semibold shadow-sm">Add task</button>
+            <p class="text-[13px] text-[var(--muted)]">Add first, then tap “Suggest” on a task card.</p>
           </div>
         </form>
       </section>
@@ -107,6 +183,13 @@
               <span id="calendar-range" class="text-xs text-[var(--muted)]"></span>
             </div>
           </div>
+          <div class="p-4 card planner-weekly-plan">
+            <div class="planner-weekly-head">
+              <p class="planner-weekly-title">Weekly Plan</p>
+              <p id="planner-weekly-status" class="planner-weekly-status">Busy time this week</p>
+            </div>
+            <div id="planner-weekly-bars" class="planner-weekly-bars"></div>
+          </div>
           <div id="calendar-week" class="p-5 card min-h-[220px]">
             <div id="calendar-days-header" class="calendar-days-header"></div>
             <div id="calendar-grid" class="calendar-grid"></div>
@@ -123,7 +206,6 @@
             <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
             <div class="flex items-center gap-2">
               <span id="suggest-limit" class="limit-pill hidden">Max 15 suggestions</span>
-              <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
             </div>
           </div>
           <div id="suggestions-explain" class="explain-box hidden" aria-live="polite"></div>
