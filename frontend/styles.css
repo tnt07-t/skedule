@@ -16,7 +16,7 @@
 
 body {
   font-family: 'Manrope', system-ui, -apple-system, sans-serif;
-  background: var(--bg);
+  background: var(--home-surface-gradient);
   color: var(--text);
   line-height: 1.6;
 }
@@ -69,6 +69,8 @@ button:active { transform: scale(0.97); }
 }
 .home-screen.home-screen-compact {
   padding: 26px clamp(20px, 6vw, 88px) 18px;
+  margin-bottom: 0 !important;
+  background: transparent;
 }
 .home-header {
   max-width: 1240px;
@@ -624,12 +626,12 @@ select.field-input {
 
 /* --- Planner shell --- */
 .planner-main {
-  margin-top: 14px;
+  margin-top: 0;
   padding: 14px clamp(12px, 2vw, 20px) 20px;
   border-radius: 28px;
-  border: 1px solid #e1e8f2;
-  background: var(--home-surface-gradient);
-  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.08);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .planner-panel {
   border: 0;
