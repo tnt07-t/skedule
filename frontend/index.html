@@ -105,14 +105,14 @@
     </section>
 
     <!-- Main (after login) -->
-    <div id="main-screen" class="hidden space-y-5">
+    <div id="main-screen" class="hidden space-y-5 planner-main">
 
       <!-- Task form -->
-      <section class="mb-2 p-5 card form-shell">
+      <section class="mb-2 p-5 card form-shell planner-panel planner-form">
         <div class="panel-head">
           <div>
-            <h2 class="text-xl font-semibold text-[var(--text)] mt-1">What should we schedule?</h2>
-            <p class="text-[13px] text-[var(--muted)] mt-1">Give us a name and a bit of context; we’ll place it in your week.</p>
+            <h2 class="text-xl font-semibold text-[var(--text)] mt-1 planner-form-title">What should we schedule?</h2>
+            <p class="text-[13px] text-[var(--muted)] mt-1 planner-form-subtitle">Give us a name and a bit of context; we’ll place it in your week.</p>
           </div>
         </div>
         <form id="task-form" class="space-y-4">
@@ -170,27 +170,26 @@
         </form>
       </section>
 
-      <!-- Tasks + Calendar side-by-side -->
-      <section class="mb-4 grid gap-3 md:grid-cols-[1.5fr_0.6fr] items-stretch">
-        <!-- Calendar -->
-        <div class="space-y-3 h-full">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-black">Calendar</h2>
-            <div class="flex flex-wrap items-center gap-2">
-              <button id="calendar-prev" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Prev</button>
-              <button id="calendar-today" class="pill bg-[var(--accent)]/10 px-3 py-1 text-xs text-[var(--accent-strong)] hover:bg-[var(--accent)]/20">Today</button>
-              <button id="calendar-next" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white">Next</button>
-              <span id="calendar-range" class="text-xs text-[var(--muted)]"></span>
-            </div>
+      <!-- Calendar + Tasks -->
+      <section class="mb-4 space-y-3 planner-panel planner-workspace">
+        <div class="flex items-center justify-between planner-workspace-head">
+          <h2 class="text-lg font-semibold text-black planner-workspace-title">Calendar</h2>
+          <div class="flex flex-wrap items-center gap-2 planner-nav-group">
+            <button id="calendar-prev" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white planner-nav-btn">Prev</button>
+            <button id="calendar-today" class="pill bg-[var(--accent)]/10 px-3 py-1 text-xs text-[var(--accent-strong)] hover:bg-[var(--accent)]/20 planner-nav-btn planner-nav-btn-today">Today</button>
+            <button id="calendar-next" class="pill bg-white/70 px-3 py-1 text-xs text-black hover:bg-white planner-nav-btn">Next</button>
+            <span id="calendar-range" class="text-xs text-[var(--muted)] planner-range-label"></span>
           </div>
-          <div class="p-4 card planner-weekly-plan">
-            <div class="planner-weekly-head">
-              <p class="planner-weekly-title">Weekly Plan</p>
-              <p id="planner-weekly-status" class="planner-weekly-status">Busy time this week</p>
-            </div>
-            <div id="planner-weekly-bars" class="planner-weekly-bars"></div>
+        </div>
+        <div class="p-4 card planner-weekly-plan">
+          <div class="planner-weekly-head">
+            <p class="planner-weekly-title">Weekly Plan</p>
+            <p id="planner-weekly-status" class="planner-weekly-status">Busy time this week</p>
           </div>
-          <div id="calendar-week" class="p-5 card min-h-[220px]">
+          <div id="planner-weekly-bars" class="planner-weekly-bars"></div>
+        </div>
+        <div class="grid gap-3 md:grid-cols-[1.5fr_0.6fr] items-start">
+          <div id="calendar-week" class="p-5 card min-h-[220px] planner-calendar-card">
             <div id="calendar-days-header" class="calendar-days-header"></div>
             <div id="calendar-grid" class="calendar-grid"></div>
             <p id="calendar-empty" class="text-slate-500 text-sm mt-3 hidden"></p>
@@ -198,18 +197,18 @@
               <div class="spinner"></div>
             </div>
           </div>
-        </div>
 
-        <!-- Tasks + suggestions -->
-        <div class="p-5 card space-y-4 h-full">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
-            <div class="flex items-center gap-2">
-              <span id="suggest-limit" class="limit-pill hidden">Max 15 suggestions</span>
+          <!-- Tasks + suggestions -->
+          <div class="p-5 card space-y-4 h-full planner-tasks-card">
+            <div class="flex items-center justify-between planner-tasks-head">
+              <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
+              <div class="flex items-center gap-2">
+                <span id="suggest-limit" class="limit-pill hidden">Max 15 suggestions</span>
+              </div>
             </div>
+            <div id="suggestions-explain" class="explain-box hidden" aria-live="polite"></div>
+            <div id="tasks-list" class="space-y-2"></div>
           </div>
-          <div id="suggestions-explain" class="explain-box hidden" aria-live="polite"></div>
-          <div id="tasks-list" class="space-y-2"></div>
         </div>
       </section>
     </div>

@@ -357,50 +357,45 @@ const API = 'http://localhost:8000';
         byDay[dayKey(d)] = 0;
       }
 
-      const allDayIntervals = [];
+      const timedIntervalsByDay = {};
+      Object.keys(byDay).forEach((k) => { timedIntervalsByDay[k] = []; });
+
       (calendarEvents || []).forEach((ev) => {
-        if (!ev?.all_day) return;
-        if (!ev.start || !ev.end) return;
-        const allDayStart = parseAllDayDate(ev.start);
-        let allDayEnd = parseAllDayDate(ev.end);
-        if (Number.isNaN(allDayStart.getTime()) || Number.isNaN(allDayEnd.getTime())) return;
-        if (allDayEnd <= allDayStart) {
-          allDayEnd = new Date(allDayStart);
-          allDayEnd.setDate(allDayEnd.getDate() + 1);
-        }
-        allDayIntervals.push({ start: allDayStart, end: allDayEnd });
+        if (!ev || ev.all_day) return; // ignore all-day events entirely
+        const evStart = new Date(ev.start);
+        const evEnd = new Date(ev.end);
+        if (Number.isNaN(evStart.getTime()) || Number.isNaN(evEnd.getTime())) return;
+        if (evEnd <= evStart) return;
+        forEachDaySegment(evStart, evEnd, (segStart, segEnd) => {
+          const key = dayKey(segStart);
+          if (Object.prototype.hasOwnProperty.call(timedIntervalsByDay, key)) {
+            timedIntervalsByDay[key].push([segStart.getTime(), segEnd.getTime()]);
+          }
+        });
       });
 
-      (calendarBusy || []).forEach((b) => {
-        const segStart = new Date(b.start);
-        const segEnd = new Date(b.end);
-        if (!(segStart instanceof Date) || Number.isNaN(segStart.getTime())) return;
-        if (!(segEnd instanceof Date) || Number.isNaN(segEnd.getTime())) return;
-        if (segEnd <= segStart) return;
-        const cursor = new Date(segStart);
-        cursor.setHours(0, 0, 0, 0);
-        while (cursor < segEnd) {
-          const next = new Date(cursor);
-          next.setDate(cursor.getDate() + 1);
-          const overlapStart = segStart > cursor ? segStart : cursor;
-          const overlapEnd = segEnd < next ? segEnd : next;
-          if (overlapEnd > overlapStart) {
-            const key = dayKey(cursor);
-            if (Object.prototype.hasOwnProperty.call(byDay, key)) {
-              let segmentMinutes = (overlapEnd - overlapStart) / 60000;
-              allDayIntervals.forEach((ad) => {
-                const cutStart = ad.start > overlapStart ? ad.start : overlapStart;
-                const cutEnd = ad.end < overlapEnd ? ad.end : overlapEnd;
-                if (cutEnd > cutStart) {
-                  segmentMinutes -= (cutEnd - cutStart) / 60000;
-                }
-              });
-              if (segmentMinutes > 0) byDay[key] += segmentMinutes;
-            }
+      Object.keys(timedIntervalsByDay).forEach((key) => {
+        const intervals = timedIntervalsByDay[key];
+        if (!intervals.length) return;
+        intervals.sort((a, b) => a[0] - b[0]);
+        let totalMs = 0;
+        let curStart = intervals[0][0];
+        let curEnd = intervals[0][1];
+        for (let i = 1; i < intervals.length; i++) {
+          const nextStart = intervals[i][0];
+          const nextEnd = intervals[i][1];
+          if (nextStart <= curEnd) {
+            curEnd = Math.max(curEnd, nextEnd);
+          } else {
+            totalMs += (curEnd - curStart);
+            curStart = nextStart;
+            curEnd = nextEnd;
           }
-          cursor.setDate(cursor.getDate() + 1);
         }
+        totalMs += (curEnd - curStart);
+        byDay[key] = totalMs / 60000;
       });
+
       return byDay;
     }
 
@@ -416,7 +411,6 @@ const API = 'http://localhost:8000';
 
       const busyByDay = buildBusyMinutesByDay(start, days);
       const keys = Object.keys(busyByDay);
-      const max = keys.reduce((m, k) => Math.max(m, busyByDay[k]), 0);
       const total = keys.reduce((s, k) => s + busyByDay[k], 0);
       status.textContent = `Total busy: ${minutesLabel(total)}`;
 
@@ -426,7 +420,7 @@ const API = 'http://localhost:8000';
         d.setDate(start.getDate() + i);
         const key = dayKey(d);
         const minutes = busyByDay[key] || 0;
-        const pct = max > 0 ? Math.max(6, Math.round((minutes / max) * 100)) : 0;
+        const pct = Math.max(0, Math.min(100, (minutes / (24 * 60)) * 100));
         html += `
           <div class="planner-weekly-row">
             <span class="planner-weekly-day">${d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
