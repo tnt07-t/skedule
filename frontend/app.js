@@ -1,4 +1,4 @@
-const API = 'http://localhost:8000';
+const API = 'https://skedule.onrender.com';
     let SUPABASE_URL = '';
     let SUPABASE_ANON_KEY = '';
     let suggesting = false;
