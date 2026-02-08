@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-pro"
-    app_url: str = "http://localhost:3000"
+    app_url: str = "https://skedule-orange.vercel.app"
     cors_allow_origins: str = ""
-    backend_url: str = "http://localhost:8000"
+    backend_url: str = "https://skedule.onrender.com"
 
     # Backwards compatibility properties
     @property
@@ -46,8 +46,7 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         origins = {
-            "http://127.0.0.1:3000",
-            "http://localhost:3000",
+            "https://skedule-orange.vercel.app",
         }
         raw_values = [self.app_url, *(self.cors_allow_origins or "").split(",")]
         for raw in raw_values:
