@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-pro"
     app_url: str = "http://localhost:3000"
+    cors_allow_origins: str = ""
     backend_url: str = "http://localhost:8000"
 
     # Backwards compatibility properties
@@ -41,6 +42,19 @@ class Settings(BaseSettings):
     @property
     def supabase_service_key(self) -> str:
         return self.supabase_secret_key
+
+    @property
+    def cors_origins(self) -> list[str]:
+        origins = {
+            "http://127.0.0.1:3000",
+            "http://localhost:3000",
+        }
+        raw_values = [self.app_url, *(self.cors_allow_origins or "").split(",")]
+        for raw in raw_values:
+            value = (raw or "").strip().rstrip("/")
+            if value:
+                origins.add(value)
+        return sorted(origins)
 
 
 settings = Settings()
