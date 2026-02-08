@@ -121,8 +121,12 @@
         <div class="p-5 card space-y-4 h-full">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-[var(--text)]">Your tasks</h2>
-            <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
+            <div class="flex items-center gap-2">
+              <span id="suggest-limit" class="limit-pill hidden">Max 15 suggestions</span>
+              <input id="suggest-count" type="text" value="5" class="w-14 text-xs px-2 py-1 bg-white border border-[var(--panel-border)] rounded" title="Number of suggestions" />
+            </div>
           </div>
+          <div id="suggestions-explain" class="explain-box hidden" aria-live="polite"></div>
           <div id="tasks-list" class="space-y-2"></div>
         </div>
       </section>

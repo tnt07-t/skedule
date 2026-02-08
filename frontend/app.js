@@ -12,7 +12,14 @@ const API = 'http://localhost:8000';
     let calendarFree = [];
     const calendarCache = new Map();
     const CAL_CACHE_TTL_MS = 10 * 60 * 1000;
+    const MAX_SUGGESTIONS = 15;
     let suggestionsCache = [];
+    let tasksCache = [];
+    const tasksById = new Map();
+    const LLM_ESTIMATE_TTL_MS = 24 * 60 * 60 * 1000;
+    const LLM_ESTIMATE_KEY = 'skedule_estimate_attempt:';
+    const llmEstimateInFlight = new Set();
+    let showExplain = false;
     let viewMode = 'week'; // default and only mode now
     let viewAnchor = new Date();
     let calendarAutoCentered = false;
@@ -702,7 +709,7 @@ const API = 'http://localhost:8000';
           showMain();
           loadProfile();
           loadTasks();
-          loadSuggestions();
+          loadSuggestions({ skipExplain: true });
           loadSchedule();
         } else {
           showLogin();
@@ -740,6 +747,9 @@ const API = 'http://localhost:8000';
     async function loadTasks() {
       if (!getToken()) return;
       const tasks = await api('/api/tasks');
+      tasksCache = tasks || [];
+      tasksById.clear();
+      tasksCache.forEach(t => { if (t && t.id) tasksById.set(t.id, t); });
       const el = document.getElementById('tasks-list');
       const suggestionItems = Array.isArray(suggestionsCache?.items)
         ? suggestionsCache.items
@@ -767,10 +777,11 @@ const API = 'http://localhost:8000';
                 ${suggs.map(s => {
                   const start = new Date(s.start_time);
                   const end = new Date(s.end_time);
-                  const label = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                  const dateLabel = start.toLocaleDateString();
+                  const timeLabel = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
                   return `
-                    <div class="p-2 border border-[var(--panel-border)] rounded-lg flex items-center justify-between" data-suggestion-id="${s.id}" data-suggestion-task="${t.id}">
-                      <span class="text-xs text-[var(--text)]">${label}</span>
+                    <div class="p-2 border border-[var(--panel-border)] rounded-lg flex items-start justify-between gap-3" data-suggestion-id="${s.id}" data-suggestion-task="${t.id}">
+                      <span class="text-xs text-[var(--text)] leading-tight">${dateLabel}<br><span class="text-[var(--muted)]">${timeLabel}</span></span>
                       <span class="flex gap-1">
                         <button class="approve px-2 py-1 text-xs btn-accent pill" data-id="${s.id}">Add</button>
                         <button class="reject px-2 py-1 text-xs pill bg-[var(--panel-border)] text-[var(--text)]" data-id="${s.id}">Reject</button>
@@ -788,6 +799,12 @@ const API = 'http://localhost:8000';
               <div>
                 <span class="font-medium text-[var(--text)]">${escapeHtml(t.name)}</span>
                 <span class="text-[var(--muted)] text-sm ml-2">${t.focus_level} · ${t.time_preference}</span>
+                <span class="task-complete-badge ${t.is_complete ? '' : 'hidden'}" data-complete-badge="${t.id}">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M5 10.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                  Done
+                </span>
               </div>
               <div class="flex gap-2">
                 <button data-task-id="${t.id}" class="suggest-slots px-3 py-1.5 text-sm btn-accent pill">Suggest</button>
@@ -799,6 +816,17 @@ const API = 'http://localhost:8000';
         `;
       }).join('');
 
+      const collapseAllExcept = (taskId) => {
+        document.querySelectorAll('.suggest-list').forEach(list => {
+          const owner = list.dataset.listFor;
+          const caret = document.querySelector(`.toggle-suggest[data-task-id=\"${owner}\"] .caret`);
+          if (!taskId || owner !== String(taskId)) {
+            list.classList.add('hidden');
+            if (caret) caret.textContent = '▼';
+          }
+        });
+      };
+      collapseAllExcept(null);
       el.querySelectorAll('.suggest-slots').forEach(btn => {
         btn.onclick = () => suggestSlots(btn.dataset.taskId);
       });
@@ -819,12 +847,20 @@ const API = 'http://localhost:8000';
       });
       el.querySelectorAll('.toggle-suggest').forEach(btn => {
         btn.onclick = () => {
-          const list = document.querySelector(`[data-list-for=\"${btn.dataset.taskId}\"]`);
-          if (list) list.classList.toggle('hidden');
+          const taskId = btn.dataset.taskId;
+          const list = document.querySelector(`[data-list-for="${taskId}"]`);
+          if (!list) return;
+          const willOpen = list.classList.contains('hidden');
+          collapseAllExcept(taskId);
+          list.classList.toggle('hidden', !willOpen ? true : false);
           const caret = btn.querySelector('.caret');
-          if (caret) caret.textContent = caret.textContent === '▼' ? '▲' : '▼';
+          if (caret) caret.textContent = willOpen ? '▲' : '▼';
         };
       });
+      updateTaskCompletionIndicators();
+      if (suggestionsCache && suggestionsCache.length) {
+        renderSuggestionsExplain(suggestionsCache.filter(s => s.status === 'pending'));
+      }
     }
 
     function escapeHtml(s) {
@@ -842,7 +878,7 @@ const API = 'http://localhost:8000';
     function getSuggestCount() {
       const input = document.getElementById('suggest-count');
       const v = Number(String(input?.value || '').replace(/[^0-9]/g, ''));
-      if (Number.isNaN(v) || v <= 0) return 5;
+      if (Number.isNaN(v) || v < 3) return 3;
       return Math.min(20, v);
     }
 
@@ -874,6 +910,37 @@ const API = 'http://localhost:8000';
       }
     }
 
+    async function ensureTaskEstimate(taskId, start, end) {
+      const attemptKey = `${LLM_ESTIMATE_KEY}${taskId}`;
+      try {
+        const task = await api(`/api/tasks/${taskId}`);
+        if (task && task.estimated_minutes != null) return;
+        if (llmEstimateInFlight.has(taskId)) return;
+        const lastAttempt = Number(localStorage.getItem(attemptKey) || 0);
+        if (lastAttempt && (Date.now() - lastAttempt) < LLM_ESTIMATE_TTL_MS) return;
+        llmEstimateInFlight.add(taskId);
+        const taskText = [task?.name, task?.description].filter(Boolean).join(' - ') || 'Task';
+        await api('/api/llm', {
+          method: 'POST',
+          body: JSON.stringify({
+            task_id: taskId,
+            task: taskText,
+            start: start.toISOString(),
+            end: end.toISOString(),
+          }),
+        });
+      } catch (e) {
+        // Best effort; suggestions should still work if LLM fails.
+      } finally {
+        llmEstimateInFlight.delete(taskId);
+        try {
+          localStorage.setItem(attemptKey, String(Date.now()));
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
+    }
+
     async function suggestSlots(taskId) {
       const start = new Date();
       start.setHours(0,0,0,0);
@@ -881,46 +948,183 @@ const API = 'http://localhost:8000';
       end.setDate(end.getDate() + 7);
       try {
         setSuggesting(true);
+        showExplain = true;
+        renderSuggestionsExplain([], { showLoading: true });
         const limit = getSuggestCount();
+        await ensureTaskEstimate(taskId, start, end);
         await api(`/api/suggestions/suggest/${taskId}?start=${start.toISOString()}&end=${end.toISOString()}&limit=${limit}`, { method: 'POST' });
-        loadSuggestions();
+        await loadSuggestions({ showLoading: true });
       } catch (e) {
-        alert(e.message || 'Failed (connect Google Calendar first)');
+        const msg = e.message || '';
+        if (e.status === 400 && /maximum pending suggestions/i.test(msg)) {
+          showSuggestionCapNotice(msg);
+        } else {
+          alert(msg || 'Failed (connect Google Calendar first)');
+        }
       } finally {
         setSuggesting(false);
       }
     }
 
-    async function loadSuggestions() {
+    async function loadSuggestions({ showLoading = false, skipExplain = false } = {}) {
+      if (showExplain && !skipExplain && showLoading) {
+        boxLoading();
+      } else if (!showExplain) {
+        renderSuggestionsExplain([], { reset: true });
+      }
       const list = await api('/api/suggestions');
       const items = Array.isArray(list?.items) ? list.items : (Array.isArray(list) ? list : []);
       suggestionsCache = items;
-      const rationale = list?.rationale || '';
-      const box = document.getElementById('llm-rationale');
-      if (box) {
-        if (rationale) {
-          box.textContent = rationale;
-          box.classList.remove('hidden');
-        } else {
-          box.classList.add('hidden');
-          box.textContent = '';
-        }
-      }
+      const pending = items.filter(s => s.status === 'pending');
+      if (!skipExplain && showExplain) renderSuggestionsExplain(pending);
       await loadTasks();
       renderSchedule();
     }
 
+    function formatHours(minutes) {
+      if (!minutes || minutes <= 0) return '0 hours';
+      const hours = minutes / 60;
+      const rounded = Math.round(hours * 10) / 10;
+      return `${rounded} hours`;
+    }
+
+    function prefCenterMinutes(pref) {
+      if (pref === 'day') return 10.5 * 60;
+      if (pref === 'night') return 20 * 60;
+      return 14.5 * 60;
+    }
+
+    function scoreSuggestion(s, rangeStart) {
+      const st = new Date(s.start_time);
+      const minutesFromStart = (st - rangeStart) / 60000;
+      const timeOfDay = st.getHours() * 60 + st.getMinutes();
+      const pref = tasksById.get(s.task_id)?.time_preference || 'midday';
+      const prefDistance = Math.abs(timeOfDay - prefCenterMinutes(pref));
+      return (-minutesFromStart) - (0.1 * prefDistance);
+    }
+
+    function rankSuggestions(pending) {
+      if (!pending || pending.length === 0) return [];
+      const minStart = pending.reduce((acc, s) => {
+        const t = new Date(s.start_time).getTime();
+        return Math.min(acc, t);
+      }, Infinity);
+      const rangeStart = new Date(minStart);
+      return pending
+        .slice()
+        .sort((a, b) => {
+          const sa = scoreSuggestion(a, rangeStart);
+          const sb = scoreSuggestion(b, rangeStart);
+          if (sb !== sa) return sb - sa;
+          return new Date(a.start_time) - new Date(b.start_time);
+        });
+    }
+
+    function updateTaskCompletionIndicators() {
+      if (!tasksById.size) return;
+      document.querySelectorAll('#tasks-list [data-task-id]').forEach(card => {
+        const id = card.dataset.taskId;
+        const task = tasksById.get(id);
+        const done = !!task?.is_complete;
+        const badge = card.querySelector(`[data-complete-badge="${id}"]`);
+        if (badge) badge.classList.toggle('hidden', !done);
+      });
+    }
+
+    
+    
+    function boxLoading() {
+      renderSuggestionsExplain([], { showLoading: true });
+    }
+function renderSuggestionsExplain(pending, { showLoading = false, reset = false } = {}) {
+      const box = document.getElementById('suggestions-explain');
+      if (!box) return;
+      if (reset) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+      if (!showExplain && !showLoading) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+      if (showLoading) {
+        box.classList.remove('hidden');
+        box.innerHTML = '<div class="title">Reasoning</div><p class="friendly">Generating…</p>';
+        return;
+      }
+      const all = suggestionsCache || [];
+      if ((!pending || pending.length === 0) && all.length === 0) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+
+      const findNeighborEvents = (startIso) => {
+        if (!Array.isArray(calendarEvents) || calendarEvents.length === 0) return {};
+        const start = new Date(startIso).getTime();
+        let before = null;
+        let after = null;
+        calendarEvents.forEach(ev => {
+          const evStart = new Date(ev.start).getTime();
+          const evEnd = new Date(ev.end).getTime();
+          if (evEnd <= start && (!before || evEnd > before.end)) {
+            before = { end: evEnd, title: ev.summary || 'an event' };
+          }
+          if (evStart >= start && (!after || evStart < after.start)) {
+            after = { start: evStart, title: ev.summary || 'an event' };
+          }
+        });
+        return { before, after };
+      };
+
+      const highlights = (pending || []).slice(0, 2).map(s => {
+        const neighbors = findNeighborEvents(s.start_time);
+        const before = neighbors.before ? neighbors.before.title : null;
+        const after = neighbors.after ? neighbors.after.title : null;
+        const task = tasksById.get(s.task_id);
+        const taskName = task?.name || s.task_name || 'Task';
+        if (before && after) return `${taskName} fits between ${before} and ${after}.`;
+        if (before) return `${taskName} follows ${before}.`;
+        if (after) return `${taskName} is before ${after}.`;
+        return `${taskName} sits in your open time.`;
+      });
+
+      const parts = [];
+      if (highlights.length) parts.push(highlights.join(' '));
+      parts.push("We match each block to the task's focus length and steer clear of your events.");
+
+      const textContent = parts.join(' ');
+      box.innerHTML = `
+        <div class="title">Reasoning</div>
+        <p class="friendly">${textContent}</p>
+      `;
+      box.classList.remove('hidden');
+    }
+
     async function approve(id, el) {
+      const taskId = el?.dataset?.suggestionTask || null;
       if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/approve`, { method: 'POST', body: JSON.stringify({ add_to_calendar: true }) });
-      await loadSuggestions();
+      if (taskId) {
+        try {
+          await api(`/api/suggestions/reject-all?task_id=${encodeURIComponent(taskId)}`, { method: 'POST' });
+          await api(`/api/tasks/${taskId}`, { method: 'DELETE' });
+        } catch (e) {
+          // ignore cleanup errors
+        }
+      }
+      await loadTasks();
+      await loadSuggestions({ skipExplain: true });
       await loadSchedule({ force: true });
     }
 
     async function reject(id, el) {
       if (el) el.classList.add('shrink-out');
       await api(`/api/suggestions/${id}/reject`, { method: 'POST' });
-      await loadSuggestions();
+      await loadTasks();
+      await loadSuggestions({ skipExplain: true });
     }
 
     async function deleteTask(id, el) {
@@ -929,19 +1133,29 @@ const API = 'http://localhost:8000';
       // clean up pending suggestions for that task
       await api(`/api/suggestions/reject-all?task_id=${id}`, { method: 'POST' });
       await loadTasks();
-      await loadSuggestions();
+      await loadSuggestions({ skipExplain: true });
       await loadSchedule();
     }
 
     async function rejectAll(taskId = null) {
-      if (taskId) {
-        document.querySelectorAll(`[data-suggestion-task="${taskId}"]`).forEach(el => el.classList.add('shrink-out'));
+      const params = new URLSearchParams();
+      if (taskId) params.set('task_id', taskId);
+      try {
+        setSuggesting(true);
+        if (taskId) {
+          document.querySelectorAll(`[data-suggestion-task="${taskId}"]`).forEach(el => el.classList.add('shrink-out'));
+        } else {
+          document.querySelectorAll('#tasks-list [data-suggestion-id]').forEach(el => el.classList.add('shrink-out'));
+        }
+        await api(`/api/suggestions/reject-all?${params.toString()}`, { method: 'POST' });
+        await loadSuggestions({ skipExplain: true });
+        await loadSchedule();
+      } finally {
+        setSuggesting(false);
       }
-      const url = taskId ? `/api/suggestions/reject-all?task_id=${taskId}` : '/api/suggestions/reject-all';
-      await api(url, { method: 'POST' });
-      await loadSuggestions();
-      await loadSchedule();
     }
+
+
 
     function bindCalendarButtons() {
       const connectBtn = document.getElementById('btn-connect-calendar');
@@ -1019,10 +1233,10 @@ const API = 'http://localhost:8000';
     loadConfig()
       .then(initSupabase)
       .then(() => {
+        renderSuggestionsExplain([], { reset: true });
         if (session) {
           loadProfile();
           loadTasks();
-          loadSuggestions();
         }
       })
       .catch((e) => {
